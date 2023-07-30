@@ -16,35 +16,47 @@ class KnxUsermod : public Usermod {
 
     String individualAddress;
 
+    struct physicalAddress {
+      int area;
+      int line;
+      int member;
+    };
+
+    struct groupAddress {
+      int main;
+      int middle;
+      int sub;
+    };
+
     static const char _name[];
     static const char _enabled[];
 
-    // int splitAddress(const char *const stringAddress, int * const arrayAddress)
-    // {
-    //   char *color_ = NULL;
-    //   const char delim[] = ".";
-    //   char *cxt = NULL;
-    //   char *token = NULL;
-    //   int position = 0;
+    int splitAddress(const char *const stringAddress, int * const arrayAddress)
+    {
+      char *number_ = NULL;
+      const char delim[] = ".";
+      char *cxt = NULL;
+      char *token = NULL;
+      int position = 0;
 
-    //   // We need to copy the string in order to keep it read only as strtok_r function requires mutable string
-    //   color_ = (char *)malloc(strlen(color));
-    //   if (NULL == color_) {
-    //     return -1;
-    //   }
+      // We need to copy the string in order to keep it read only as strtok_r function requires mutable string
+      number_ = (char *)malloc(strlen(stringAddress));
+      if (NULL == number_) {
+        return -1;
+      }
 
-    //   strcpy(color_, color);
-    //   token = strtok_r(color_, delim, &cxt);
+      strcpy(number_, stringAddress);
+      token = strtok_r(number_, delim, &cxt);
 
-    //   while (token != NULL)
-    //   {
-    //     rgb[position++] = (int)strtoul(token, NULL, 10);
-    //     token = strtok_r(NULL, delim, &cxt);
-    //   }
-    //   free(color_);
+      while (token != NULL)
+      {
+        arrayAddress[position++] = (int)strtoul(token, NULL, 10);
+        token = strtok_r(NULL, delim, &cxt);
+      }
+      free(number_);
 
-    //   return position;
-    // }
+      return position;
+    }
 
   public:
 
@@ -58,6 +70,7 @@ class KnxUsermod : public Usermod {
     }
 
     void connected() {
+      Serial.println("Connected to WiFi!");      
     }
 
     void loop() {
@@ -69,6 +82,7 @@ class KnxUsermod : public Usermod {
       top[FPSTR(_enabled)] = enabled;
       //save these vars persistently whenever settings are saved
       top["individualAddress"] = individualAddress;
+      top["groupAddress"] = groupAddress;
     }
 
     bool readFromConfig(JsonObject& root)
@@ -77,7 +91,8 @@ class KnxUsermod : public Usermod {
 
       bool configComplete = !top.isNull();
 
-      configComplete &= getJsonValue(top["individualAddress"], individualAddress, "0.0.0");  
+      configComplete &= getJsonValue(top["individualAddress"], individualAddress, "0.0.0"); 
+      configComplete &= getJsonValue(top["groupAddress"], groupAddress, [0, 0, 0]);
 
       return configComplete; 
     }
