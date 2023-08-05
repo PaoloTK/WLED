@@ -14,48 +14,22 @@ class KnxUsermod : public Usermod {
     bool initDone = false;
     unsigned long lastTime = 0;
 
-    String individualAddress;
-
-    struct physicalAddress {
-      int area;
-      int line;
-      int member;
-    };
-
-    struct groupAddress {
-      int main;
-      int middle;
-      int sub;
-    };
-
     static const char _name[];
     static const char _enabled[];
+    static const char _main[];
+    static const char _middle[];
+    static const char _sub[];
 
-    int splitAddress(const char *const stringAddress, int * const arrayAddress)
-    {
-      char *number_ = NULL;
-      const char delim[] = ".";
-      char *cxt = NULL;
-      char *token = NULL;
-      int position = 0;
+    int individualAddress[3];
+    bool enableSwitch;
+    int switchGroup[3];
 
-      // We need to copy the string in order to keep it read only as strtok_r function requires mutable string
-      number_ = (char *)malloc(strlen(stringAddress));
-      if (NULL == number_) {
-        return -1;
-      }
+    String addressToString(int address[3], bool isGroupAddress) {
+      char stringAddress[12];
+      const char delimiter = isGroupAddress ? '/' : '.';
 
-      strcpy(number_, stringAddress);
-      token = strtok_r(number_, delim, &cxt);
-
-      while (token != NULL)
-      {
-        arrayAddress[position++] = (int)strtoul(token, NULL, 10);
-        token = strtok_r(NULL, delim, &cxt);
-      }
-      free(number_);
-
-      return position;
+      sprintf(stringAddress,"%u%c%u%c%u", address[0], delimiter, address[1], delimiter, address[2]);
+      return String(stringAddress);
     }
 
   public:
@@ -81,8 +55,16 @@ class KnxUsermod : public Usermod {
       JsonObject top = root.createNestedObject(FPSTR(_name));
       top[FPSTR(_enabled)] = enabled;
       //save these vars persistently whenever settings are saved
-      top["individualAddress"] = individualAddress;
-      top["groupAddress"] = groupAddress;
+      JsonObject indivAddr = top.createNestedObject(F("Individual Address"));
+      indivAddr["Area"] = individualAddress[0];
+      indivAddr["Line"] = individualAddress[1];
+      indivAddr["Member"] = individualAddress[2];
+      JsonObject switchAddr = top.createNestedObject(F("Switch Group"));
+      switchAddr[FPSTR(_enabled)] = enableSwitch;
+      switchAddr[FPSTR(_main)] = switchGroup[0];
+      switchAddr[FPSTR(_middle)] = switchGroup[1];
+      switchAddr[FPSTR(_sub)] = switchGroup[2];
+      
     }
 
     bool readFromConfig(JsonObject& root)
@@ -90,9 +72,20 @@ class KnxUsermod : public Usermod {
       JsonObject top = root[FPSTR(_name)];
 
       bool configComplete = !top.isNull();
+      configComplete &= getJsonValue(top[FPSTR(_enabled)], enabled);
 
-      configComplete &= getJsonValue(top["individualAddress"], individualAddress, "0.0.0"); 
-      configComplete &= getJsonValue(top["groupAddress"], groupAddress, [0, 0, 0]);
+      JsonObject indivAddr = top[F("Individual Address")];
+      configComplete = !indivAddr.isNull();
+      configComplete &= getJsonValue(indivAddr["Area"], individualAddress[0], 0);
+      configComplete &= getJsonValue(indivAddr["Line"], individualAddress[1], 0);
+      configComplete &= getJsonValue(indivAddr["Member"], individualAddress[2], 0);
+
+      JsonObject switchAddr = top[F("Switch Group")];
+      configComplete = !switchAddr.isNull();      
+      configComplete &= getJsonValue(switchAddr[FPSTR(_enabled)], enableSwitch, false);
+      configComplete &= getJsonValue(switchAddr[FPSTR(_main)], switchGroup[0], 0);
+      configComplete &= getJsonValue(switchAddr[FPSTR(_middle)], switchGroup[1], 0);
+      configComplete &= getJsonValue(switchAddr[FPSTR(_sub)], switchGroup[2], 0);
 
       return configComplete; 
     }
@@ -103,9 +96,12 @@ class KnxUsermod : public Usermod {
       JsonObject user = root["u"];
       if (user.isNull()) user = root.createNestedObject("u");
 
-      JsonArray knxArr = user.createNestedArray(FPSTR(_name));
-      knxArr.add(F("Individual address: "));
-      knxArr.add(individualAddress);
+      JsonArray individualAddressArr = user.createNestedArray(F("Individual address: "));
+      individualAddressArr.add(addressToString(individualAddress, false));
+      if (enableSwitch) {
+        JsonArray groupAddressArr = user.createNestedArray(F("Switch Group: "));      
+        groupAddressArr.add(addressToString(switchGroup, true));
+      }
     }  
 
     void onStateChange(uint8_t mode) {
@@ -121,3 +117,6 @@ class KnxUsermod : public Usermod {
 // add more strings here to reduce flash memory usage
 const char KnxUsermod::_name[]    PROGMEM = "KNX";
 const char KnxUsermod::_enabled[] PROGMEM = "enabled";
+const char KnxUsermod::_main[] PROGMEM = "main";
+const char KnxUsermod::_middle[] PROGMEM = "middle";
+const char KnxUsermod::_sub[] PROGMEM = "sub";
