@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include "wled.h"
 #include <KnxTpUart.h>
 
@@ -23,7 +24,7 @@ class KnxUsermod : public Usermod {
 
     byte lastKnownBri = 0;
 
-    KnxTpUart* knxPtr;
+    std::unique_ptr<KnxTpUart> knxPtr;
 
     String addressToString(int address[3], bool isGroupAddress);
 
@@ -34,7 +35,7 @@ class KnxUsermod : public Usermod {
     inline bool isEnabled() { return enabled; }
 
     void setup() {
-      knxPtr = new KnxTpUart(&Serial1, addressToString(individualAddress, false));
+      knxPtr = std::unique_ptr<KnxTpUart>(new KnxTpUart(&Serial1, addressToString(individualAddress, false)));
       Serial1.begin(19200, SERIAL_8E1);
       lastKnownBri = bri;
       initDone = true;
@@ -47,11 +48,10 @@ class KnxUsermod : public Usermod {
       if (millis() - lastTime > 100) {
         if (knxPtr)
         {
-          KnxTpUart knx = *knxPtr;
-          KnxTpUartSerialEventType eType = knx.serialEvent();
+          KnxTpUartSerialEventType eType = knxPtr->serialEvent();
           if (eType == KNX_TELEGRAM || eType == IRRELEVANT_KNX_TELEGRAM)
           {
-              KnxTelegram* telegram = knx.getReceivedTelegram();
+              KnxTelegram* telegram = knxPtr->getReceivedTelegram();
           }
           lastTime = millis();
         }
@@ -63,15 +63,14 @@ class KnxUsermod : public Usermod {
 
       if (knxPtr)
       {
-        KnxTpUart knx = *knxPtr;
         // Light Switch State
         if (bri != lastKnownBri) {
           lastKnownBri = bri;
           if (bri) {
-            knx.groupWriteBool(addressToString(switchGroup, true), true);
+            knxPtr->groupWriteBool(addressToString(switchGroup, true), true);
           }
           else {
-            knx.groupWriteBool(addressToString(switchGroup, true), false);
+            knxPtr->groupWriteBool(addressToString(switchGroup, true), false);
           }
         }
       }
