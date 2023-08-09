@@ -1,10 +1,7 @@
 #pragma once
 
 #include "wled.h"
-namespace KNX 
-{
-     #include <KnxTpUart.h>
-}
+#include <KnxTpUart.h>
 
 class KnxUsermod : public Usermod {
 
@@ -24,13 +21,11 @@ class KnxUsermod : public Usermod {
     bool enableSwitch;
     int switchGroup[3];
 
-    String addressToString(int address[3], bool isGroupAddress) {
-      char stringAddress[12];
-      const char delimiter = isGroupAddress ? '/' : '.';
+    byte lastKnownBri = 0;
 
-      sprintf(stringAddress,"%u%c%u%c%u", address[0], delimiter, address[1], delimiter, address[2]);
-      return String(stringAddress);
-    }
+    KnxTpUart* knxPtr;
+
+    String addressToString(int address[3], bool isGroupAddress);
 
   public:
 
@@ -39,15 +34,47 @@ class KnxUsermod : public Usermod {
     inline bool isEnabled() { return enabled; }
 
     void setup() {
-      Serial.println("Hello from KNX!");
+      knxPtr = new KnxTpUart(&Serial1, addressToString(individualAddress, false));
+      Serial1.begin(19200, SERIAL_8E1);
+      lastKnownBri = bri;
       initDone = true;
     }
 
-    void connected() {
-      Serial.println("Connected to WiFi!");      
+    void loop() {
+      if (!enabled || strip.isUpdating()) return;
+
+      // do your magic here
+      if (millis() - lastTime > 100) {
+        if (knxPtr)
+        {
+          KnxTpUart knx = *knxPtr;
+          KnxTpUartSerialEventType eType = knx.serialEvent();
+          if (eType == KNX_TELEGRAM || eType == IRRELEVANT_KNX_TELEGRAM)
+          {
+              KnxTelegram* telegram = knx.getReceivedTelegram();
+          }
+          lastTime = millis();
+        }
+      }
     }
 
-    void loop() {
+    void onStateChange(uint8_t mode) {
+      if (!initDone) return;
+
+      if (knxPtr)
+      {
+        KnxTpUart knx = *knxPtr;
+        // Light Switch State
+        if (bri != lastKnownBri) {
+          lastKnownBri = bri;
+          if (bri) {
+            knx.groupWriteBool(addressToString(switchGroup, true), true);
+          }
+          else {
+            knx.groupWriteBool(addressToString(switchGroup, true), false);
+          }
+        }
+      }
     }
 
     void addToConfig(JsonObject& root)
@@ -104,15 +131,19 @@ class KnxUsermod : public Usermod {
       }
     }  
 
-    void onStateChange(uint8_t mode) {
-      // do something if WLED state changed (color, brightness, effect, preset, etc)
-    }
-
     uint16_t getId()
     {
       return USERMOD_ID_KNX;
     }
 };
+
+String KnxUsermod::addressToString(int address[3], bool isGroupAddress) {
+      char stringAddress[12];
+      const char delimiter = isGroupAddress ? '/' : '.';
+
+      sprintf(stringAddress,"%u%c%u%c%u", address[0], delimiter, address[1], delimiter, address[2]);
+      return String(stringAddress);
+}
 
 // add more strings here to reduce flash memory usage
 const char KnxUsermod::_name[]    PROGMEM = "KNX";
