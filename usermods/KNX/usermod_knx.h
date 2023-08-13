@@ -1,6 +1,7 @@
 #pragma once
 
-#include <memory>
+#include <sstream>
+#include <cstdio>
 #include "wled.h"
 #include <KnxTpUart.h>
 
@@ -23,8 +24,10 @@ class KnxUsermod : public Usermod {
 
     std::unique_ptr<KnxTpUart> knxPtr;
 
-    bool validateAddress(String address);
-    bool validateGroup(String address);
+    // KNX invidual addresses should be in the format X.Y.Z, with X and Y 0-15 and Z 0-255
+    bool validateAddress(const String& address);
+    // Group addresses can be in 3-level X/Y/Z (0-31/0-7/0-255), 2-level X/Z (0-31/0-2047) or free style Z (0-65535)
+    bool validateGroup(const String& address);
 
   public:
 
@@ -83,10 +86,10 @@ class KnxUsermod : public Usermod {
       top[FPSTR(_enabled)] = enabled;
       //save these vars persistently whenever settings are saved
       JsonObject indivAddr = top.createNestedObject(F("Individual Address"));
-      indivAddr["Address"] = individualAddress;
+      indivAddr["Address"] = validateAddress(individualAddress) ? individualAddress : "INVALID ADDRESS";
       JsonObject switchAddr = top.createNestedObject(F("Switch Group"));
       switchAddr[FPSTR(_enabled)] = enableSwitch;
-      switchAddr["Address"] = switchGroup;
+      switchAddr["Address"] = validateGroup(switchGroup) ? switchGroup : "INVALID GROUP";
       
     }
 
@@ -132,12 +135,43 @@ class KnxUsermod : public Usermod {
     }
 };
 
-bool KnxUsermod::validateAddress(String address) {
-  return true;
+bool KnxUsermod::validateAddress(const String& address) {
+  bool validAddress = false;
+  int area, line, device;
+  int members = std::sscanf(address.c_str(), "%i/%i/%i", &area, &line, &device);
+
+  if (members == 3) {
+    if ((0 <= area) && (area <= 15) && (0 <= line) && (line <= 15) && (0 <= device) && (device <= 255)) {
+      validAddress = true;
+    }
+  }
+
+  return validAddress;
 }
 
-bool KnxUsermod::validateGroup(String address) {
-  return true;
+bool KnxUsermod::validateGroup(const String& address) {
+  bool validAddress = false;
+  int first, second, third;
+
+  int members = std::sscanf(address.c_str(), "%i/%i/%i", &first, &second, &third);
+
+  if (members == 3) {
+    if ((0 <= first) && (first <= 31) && (0 <= second) && (second <= 7) && (0 <= third) && (third <= 255)) {
+      validAddress = true;
+    }
+  }
+  else if (members == 2) {
+    if ((0 <= first) && (first <= 31) && (0 <= second) && (second <= 2047)) {
+      validAddress = true;
+    }
+  }
+  else if (members == 1) {
+    if (first <= 65535) {
+      validAddress = true;
+    }
+  }
+
+  return validAddress; 
 }
 
 // add more strings here to reduce flash memory usage
