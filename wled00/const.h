@@ -149,6 +149,7 @@
 #define USERMOD_ID_SHT                   39     //Usermod "usermod_sht.h
 #define USERMOD_ID_KLIPPER               40     // Usermod Klipper percentage
 #define USERMOD_ID_KNX                   41     //Usermod "usermod_knx.h"
+#define USERMOD_ID_WIREGUARD             41     //Usermod "wireguard.h"
 
 //Access point behavior
 #define AP_BEHAVIOR_BOOT_NO_CONN          0     //Open AP when no connection after boot
