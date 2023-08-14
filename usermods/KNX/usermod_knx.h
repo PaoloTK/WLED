@@ -19,6 +19,7 @@ class KnxUsermod : public Usermod {
     String individualAddress;
     bool enableSwitch;
     String switchGroup;
+    String switchStateGroup;
 
     byte lastKnownBri = 0;
 
@@ -38,7 +39,10 @@ class KnxUsermod : public Usermod {
     void setup() {
       if (isEnabled() && individualAddress) {
         knxPtr = std::unique_ptr<KnxTpUart>(new KnxTpUart(&Serial1, individualAddress));
-        Serial1.begin(19200, SERIAL_8E1);
+        if (knxPtr && switchGroup != "0/0/0") {
+          knxPtr->addListenGroupAddress(switchGroup);
+        }
+        Serial1.begin(19200, SERIAL_8E1, 18, 19);
         lastKnownBri = bri;
       }
 
@@ -50,12 +54,24 @@ class KnxUsermod : public Usermod {
 
       // do your magic here
       if (millis() - lastTime > 100) {
-        if (knxPtr)
-        {
+        if (knxPtr) {
           KnxTpUartSerialEventType eType = knxPtr->serialEvent();
-          if (eType == KNX_TELEGRAM || eType == IRRELEVANT_KNX_TELEGRAM)
+          if (eType == KNX_TELEGRAM)
           {
               KnxTelegram* telegram = knxPtr->getReceivedTelegram();
+              if (telegram ->getBool()) {
+                if (bri == 0) {
+                  bri = briLast;
+                  updateInterfaces(CALL_MODE_BUTTON);
+                }
+              }
+              // dunno if payload incorrect or off state
+              else {
+                if (bri != 0) {
+                  bri = 0;
+                  updateInterfaces(CALL_MODE_BUTTON);
+                }
+              }
           }
           lastTime = millis();
         }
@@ -71,10 +87,10 @@ class KnxUsermod : public Usermod {
         if (bri != lastKnownBri) {
           lastKnownBri = bri;
           if (bri) {
-            knxPtr->groupWriteBool(switchGroup, true);
+            knxPtr->groupWriteBool(switchStateGroup, true);
           }
           else {
-            knxPtr->groupWriteBool(switchGroup, false);
+            knxPtr->groupWriteBool(switchStateGroup, false);
           }
         }
       }
@@ -90,6 +106,7 @@ class KnxUsermod : public Usermod {
       JsonObject switchAddr = top.createNestedObject(F("Switch Group"));
       switchAddr[FPSTR(_enabled)] = enableSwitch;
       switchAddr["Address"] = validateGroup(switchGroup) ? switchGroup : "INVALID GROUP";
+      switchAddr["State"] = validateGroup(switchStateGroup) ? switchStateGroup : "INVALID GROUP";
       
     }
 
@@ -108,6 +125,7 @@ class KnxUsermod : public Usermod {
       configComplete = !switchAddr.isNull();      
       configComplete &= getJsonValue(switchAddr[FPSTR(_enabled)], enableSwitch, false);
       configComplete &= getJsonValue(switchAddr["Address"], switchGroup, "0/0/0");
+      configComplete &= getJsonValue(switchAddr["State"], switchStateGroup, "0/0/0");
 
       return configComplete; 
     }
@@ -118,14 +136,13 @@ class KnxUsermod : public Usermod {
       JsonObject user = root["u"];
       if (user.isNull()) user = root.createNestedObject("u");
 
-      if (validateAddress(individualAddress)) {
-        JsonArray individualAddressArr = user.createNestedArray(F("Individual address: "));
-        individualAddressArr.add(individualAddress);
-      }
+      JsonArray individualAddressArr = user.createNestedArray(F("Individual address: "));
+      individualAddressArr.add(individualAddress);
       
-      if (enableSwitch && validateGroup(switchGroup)) {
+      if (enableSwitch) {
         JsonArray groupAddressArr = user.createNestedArray(F("Switch Group: "));      
         groupAddressArr.add(switchGroup);
+        groupAddressArr.add(switchStateGroup);
       }
     }  
 
