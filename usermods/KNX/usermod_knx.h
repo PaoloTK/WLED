@@ -138,7 +138,7 @@ class KnxUsermod : public Usermod {
 bool KnxUsermod::validateAddress(const String& address) {
   bool validAddress = false;
   int area, line, device;
-  int members = std::sscanf(address.c_str(), "%i/%i/%i", &area, &line, &device);
+  int members = std::sscanf(address.c_str(), "%i.%i.%i", &area, &line, &device);
 
   if (members == 3) {
     if ((0 <= area) && (area <= 15) && (0 <= line) && (line <= 15) && (0 <= device) && (device <= 255)) {
