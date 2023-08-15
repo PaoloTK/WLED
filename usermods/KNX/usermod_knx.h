@@ -20,10 +20,15 @@ class KnxUsermod : public Usermod {
     bool enableSwitch;
     String switchGroup;
     String switchStateGroup;
+    bool enableAbsoluteDim;
+    String absoluteDimGroup;
+    String absoluteDimStateGroup;
 
     byte lastKnownBri = 0;
 
     std::unique_ptr<KnxTpUart> knxPtr;
+
+    void updateFromBus();
 
     // KNX invidual addresses should be in the format X.Y.Z, with X and Y 0-15 and Z 0-255
     bool validateAddress(const String& address);
@@ -39,8 +44,14 @@ class KnxUsermod : public Usermod {
     void setup() {
       if (isEnabled() && individualAddress) {
         knxPtr = std::unique_ptr<KnxTpUart>(new KnxTpUart(&Serial1, individualAddress));
-        if (knxPtr && switchGroup != "0/0/0") {
-          knxPtr->addListenGroupAddress(switchGroup);
+        if (knxPtr) {
+          if (switchGroup != "0/0/0") {
+            knxPtr->addListenGroupAddress(switchGroup);
+          }
+          if (absoluteDimGroup != "0/0/0") {
+            knxPtr->addListenGroupAddress(absoluteDimGroup);            
+          }
+
         }
         Serial1.begin(19200, SERIAL_8E1, 18, 19);
         lastKnownBri = bri;
@@ -55,26 +66,9 @@ class KnxUsermod : public Usermod {
       // do your magic here
       if (millis() - lastTime > 100) {
         if (knxPtr) {
-          KnxTpUartSerialEventType eType = knxPtr->serialEvent();
-          if (eType == KNX_TELEGRAM)
-          {
-              KnxTelegram* telegram = knxPtr->getReceivedTelegram();
-              if (telegram ->getBool()) {
-                if (bri == 0) {
-                  bri = briLast;
-                  updateInterfaces(CALL_MODE_BUTTON);
-                }
-              }
-              // dunno if payload incorrect or off state
-              else {
-                if (bri != 0) {
-                  bri = 0;
-                  updateInterfaces(CALL_MODE_BUTTON);
-                }
-              }
-          }
-          lastTime = millis();
+          updateFromBus();
         }
+        lastTime = millis();
       }
     }
 
@@ -100,13 +94,19 @@ class KnxUsermod : public Usermod {
     {
       JsonObject top = root.createNestedObject(FPSTR(_name));
       top[FPSTR(_enabled)] = enabled;
-      //save these vars persistently whenever settings are saved
+
       JsonObject indivAddr = top.createNestedObject(F("Individual Address"));
       indivAddr["Address"] = validateAddress(individualAddress) ? individualAddress : "INVALID ADDRESS";
-      JsonObject switchAddr = top.createNestedObject(F("Switch Group"));
-      switchAddr[FPSTR(_enabled)] = enableSwitch;
-      switchAddr["Address"] = validateGroup(switchGroup) ? switchGroup : "INVALID GROUP";
-      switchAddr["State"] = validateGroup(switchStateGroup) ? switchStateGroup : "INVALID GROUP";
+
+      JsonObject swGroups = top.createNestedObject(F("Switch Groups"));
+      swGroups[FPSTR(_enabled)] = enableSwitch;
+      swGroups["Address"] = validateGroup(switchGroup) ? switchGroup : "INVALID GROUP";
+      swGroups["State"] = validateGroup(switchStateGroup) ? switchStateGroup : "INVALID GROUP";
+
+      JsonObject absDimGroups = top.createNestedObject(F("Absolute Dim Groups"));
+      absDimGroups[FPSTR(_enabled)] = enableAbsoluteDim;
+      absDimGroups["Address"] = validateGroup(absoluteDimGroup) ? absoluteDimGroup : "INVALID GROUP";
+      absDimGroups["State"] = validateGroup(absoluteDimStateGroup) ? absoluteDimStateGroup : "INVALID GROUP";
       
     }
 
@@ -121,11 +121,17 @@ class KnxUsermod : public Usermod {
       configComplete = !indivAddr.isNull();
       configComplete &= getJsonValue(indivAddr["Address"], individualAddress, "0.0.0");
 
-      JsonObject switchAddr = top[F("Switch Group")];
-      configComplete = !switchAddr.isNull();      
-      configComplete &= getJsonValue(switchAddr[FPSTR(_enabled)], enableSwitch, false);
-      configComplete &= getJsonValue(switchAddr["Address"], switchGroup, "0/0/0");
-      configComplete &= getJsonValue(switchAddr["State"], switchStateGroup, "0/0/0");
+      JsonObject swGroups = top[F("Switch Groups")];
+      configComplete = !swGroups.isNull();      
+      configComplete &= getJsonValue(swGroups[FPSTR(_enabled)], enableSwitch, false);
+      configComplete &= getJsonValue(swGroups["Address"], switchGroup, "0/0/0");
+      configComplete &= getJsonValue(swGroups["State"], switchStateGroup, "0/0/0");
+
+      JsonObject absDimGroups = top[F("Absolute Dim Groups")];
+      configComplete = !absDimGroups.isNull();      
+      configComplete &= getJsonValue(absDimGroups[FPSTR(_enabled)], enableAbsoluteDim, false);
+      configComplete &= getJsonValue(absDimGroups["Address"], absoluteDimGroup, "0/0/0");
+      configComplete &= getJsonValue(absDimGroups["State"], absoluteDimStateGroup, "0/0/0");
 
       return configComplete; 
     }
@@ -136,13 +142,20 @@ class KnxUsermod : public Usermod {
       JsonObject user = root["u"];
       if (user.isNull()) user = root.createNestedObject("u");
 
-      JsonArray individualAddressArr = user.createNestedArray(F("Individual address: "));
-      individualAddressArr.add(individualAddress);
+      JsonArray addressArr = user.createNestedArray(F("Individual address:"));
+      addressArr.add(individualAddress);
       
       if (enableSwitch) {
-        JsonArray groupAddressArr = user.createNestedArray(F("Switch Group: "));      
-        groupAddressArr.add(switchGroup);
-        groupAddressArr.add(switchStateGroup);
+        JsonArray switchArr = user.createNestedArray(F("Switch group:"));
+        switchArr.add(switchGroup);
+        JsonArray switchStateArr = user.createNestedArray(F("Switch state group:"));
+        switchStateArr.add(switchStateGroup);
+      }
+      if (enableAbsoluteDim) {
+        JsonArray absDimArr = user.createNestedArray(F("Absolute dim group:"));
+        absDimArr.add(absoluteDimGroup);
+        JsonArray absDimStateArr = user.createNestedArray(F("Absolute dim state group:"));
+        absDimStateArr.add(absoluteDimStateGroup);
       }
     }  
 
@@ -151,6 +164,34 @@ class KnxUsermod : public Usermod {
       return USERMOD_ID_KNX;
     }
 };
+
+void KnxUsermod::updateFromBus() {
+  KnxTpUartSerialEventType eType = knxPtr->serialEvent();
+
+  if (eType == KNX_TELEGRAM)
+  {
+      KnxTelegram* telegram = knxPtr->getReceivedTelegram();
+      if (telegram->getBool()) {
+        if (bri == 0) {
+          bri = briLast;
+          updateInterfaces(CALL_MODE_BUTTON);
+        }
+      }
+      // dunno if payload incorrect or off state
+      else {
+        Serial.println("NO");
+        if (bri != 0) {
+          bri = 0;
+          updateInterfaces(CALL_MODE_BUTTON);
+        }
+      }
+      if (telegram->get1ByteIntValue()) {
+        Serial.println(telegram->get1ByteIntValue());
+        bri = telegram->get1ByteIntValue();
+        updateInterfaces(CALL_MODE_BUTTON);
+      }
+  }
+}
 
 bool KnxUsermod::validateAddress(const String& address) {
   bool validAddress = false;
