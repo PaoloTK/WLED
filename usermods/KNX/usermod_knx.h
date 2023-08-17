@@ -45,6 +45,8 @@ class KnxUsermod : public Usermod {
     bool validateAddress(const String& address);
     // Group addresses can be in 3-level X/Y/Z (0-31/0-7/0-255), 2-level X/Z (0-31/0-2047) or free style Z (0-65535)
     bool validateGroup(const String& address);
+    // Does the telegram source group match the target group
+    bool isTargetGroup(const KnxTelegram telegram, const String& target);
 
   public:
 
@@ -207,25 +209,48 @@ void KnxUsermod::updateFromBus() {
   if (eType == KNX_TELEGRAM)
   {
     KnxTelegram* telegram = knxPtr->getReceivedTelegram();
-    if (telegram->getBool()) {
-      if (bri == 0) {
-        bri = briLast;
-        updateInterfaces(CALL_MODE_BUTTON);
+
+    // Switch group
+    if (isTargetGroup(*telegram, switchGroup)) {
+      if (telegram->getBool()) {
+        if (bri == 0) {
+          bri = briLast;
+          updateInterfaces(CALL_MODE_BUTTON);
+        }
+      }
+      else {
+        if (bri != 0) {
+          bri = 0;
+          updateInterfaces(CALL_MODE_BUTTON);
+        }
       }
     }
-    // dunno if payload incorrect or off state
-    else {
-      if (bri != 0) {
-        bri = 0;
-        updateInterfaces(CALL_MODE_BUTTON);
+    // Absolute Dim Group
+    if (isTargetGroup(*telegram, absoluteDimGroup)) {
+      if (telegram->get1ByteIntValue()) {
+        bri = telegram->get1ByteIntValue();
+        stateUpdated(CALL_MODE_DIRECT_CHANGE);
       }
-    }
-    if (telegram->get1ByteIntValue()) {
-      bri = telegram->get1ByteIntValue();
-      stateUpdated(CALL_MODE_DIRECT_CHANGE);
     }
   }
 }
+
+bool KnxUsermod::isTargetGroup(KnxTelegram telegram, const String& target) {
+  String sourceGroup;
+  int main, middle, sub;
+
+  main = telegram.getTargetMainGroup();
+  middle = telegram.getTargetMiddleGroup();
+  sub = telegram.getTargetSubGroup();
+
+  // @fix: only accounts for three level style groups
+  sourceGroup = String(String(main) + '/' + String(middle) + '/' + String(sub));
+  
+  Serial.println("Telegram Group: " + sourceGroup);
+  return (target == sourceGroup) ? true : false;
+}
+
+
 
 bool KnxUsermod::validateAddress(const String& address) {
   bool validAddress = false;
