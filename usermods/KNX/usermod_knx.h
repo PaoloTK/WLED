@@ -272,26 +272,23 @@ bool KnxUsermod::validateGroup(const String& address) {
 
   int members = std::sscanf(address.c_str(), "%i/%i/%i", &first, &second, &third);
 
-
-  if ((first + second + third) != 0) {
-    // 3-level structure
-    if (members == 3) {
-      if ((0 <= first) && (first <= 31) && (0 <= second) && (second <= 7) && (0 <= third) && (third <= 255)) {
-        validAddress = true;
-      }
+  // 3-level structure
+  if (members == 3 && ((first + second + third) != 0)) {
+    if ((0 <= first) && (first <= 31) && (0 <= second) && (second <= 7) && (0 <= third) && (third <= 255)) {
+      validAddress = true;
     }
-    // 2-level structure
-    else if (members == 2) {
-      if ((0 <= first) && (first <= 31) && (0 <= second) && (second <= 2047)) {
-        validAddress = true;
-      }
+  }
+  // 2-level structure
+  else if (members == 2 && ((first + second) != 0)) {
+    if ((0 <= first) && (first <= 31) && (0 <= second) && (second <= 2047)) {
+      validAddress = true;
     }
-    // free structure
-    else if (members == 1) {
-      if (first <= 65535) {
-        validAddress = true;
-      }
-    }  
+  }
+  // free structure
+  else if (members == 1 && (first != 0)) {
+    if (first <= 65535) {
+      validAddress = true;
+    }
   }
 
   return validAddress; 
