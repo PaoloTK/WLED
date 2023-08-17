@@ -245,8 +245,7 @@ bool KnxUsermod::isTargetGroup(KnxTelegram telegram, const String& target) {
 
   // @fix: only accounts for three level style groups
   sourceGroup = String(String(main) + '/' + String(middle) + '/' + String(sub));
-  
-  Serial.println("Telegram Group: " + sourceGroup);
+
   return (target == sourceGroup) ? true : false;
 }
 
@@ -258,7 +257,8 @@ bool KnxUsermod::validateAddress(const String& address) {
   int members = std::sscanf(address.c_str(), "%i.%i.%i", &area, &line, &device);
 
   if (members == 3) {
-    if ((0 <= area) && (area <= 15) && (0 <= line) && (line <= 15) && (0 <= device) && (device <= 255)) {
+    // Devices should never have 0 as their "device" member
+    if ((0 <= area) && (area <= 15) && (0 <= line) && (line <= 15) && (1 <= device) && (device <= 255)) {
       validAddress = true;
     }
   }
@@ -272,20 +272,26 @@ bool KnxUsermod::validateGroup(const String& address) {
 
   int members = std::sscanf(address.c_str(), "%i/%i/%i", &first, &second, &third);
 
-  if (members == 3) {
-    if ((0 <= first) && (first <= 31) && (0 <= second) && (second <= 7) && (0 <= third) && (third <= 255)) {
-      validAddress = true;
+
+  if ((first + second + third) != 0) {
+    // 3-level structure
+    if (members == 3) {
+      if ((0 <= first) && (first <= 31) && (0 <= second) && (second <= 7) && (0 <= third) && (third <= 255)) {
+        validAddress = true;
+      }
     }
-  }
-  else if (members == 2) {
-    if ((0 <= first) && (first <= 31) && (0 <= second) && (second <= 2047)) {
-      validAddress = true;
+    // 2-level structure
+    else if (members == 2) {
+      if ((0 <= first) && (first <= 31) && (0 <= second) && (second <= 2047)) {
+        validAddress = true;
+      }
     }
-  }
-  else if (members == 1) {
-    if (first <= 65535) {
-      validAddress = true;
-    }
+    // free structure
+    else if (members == 1) {
+      if (first <= 65535) {
+        validAddress = true;
+      }
+    }  
   }
 
   return validAddress; 
