@@ -17,6 +17,8 @@ class KnxUsermod : public Usermod {
     static const char _address[];
     static const char _group[];
     static const char _state[];
+    static const char _invalidaddress[];
+    static const char _invalidgroup[];
     static const char _rxPin[];
     static const char _txPin[];
 
@@ -103,17 +105,17 @@ class KnxUsermod : public Usermod {
       pins[FPSTR(_rxPin)] = rxIo;
 
       JsonObject indivAddr = top.createNestedObject(F("Individual Address"));
-      indivAddr[FPSTR(_address)] = validateAddress(individualAddress) ? individualAddress : "INVALID ADDRESS";
+      indivAddr[FPSTR(_address)] = validateAddress(individualAddress) ? individualAddress : FPSTR(_invalidaddress);
 
       JsonObject swGroups = top.createNestedObject(F("Switch Groups"));
       swGroups[FPSTR(_enabled)] = enableSwitch;
-      swGroups[FPSTR(_group)] = validateGroup(switchGroup) ? switchGroup : "INVALID GROUP";
-      swGroups[FPSTR(_state)] = validateGroup(switchStateGroup) ? switchStateGroup : "INVALID GROUP";
+      swGroups[FPSTR(_group)] = validateGroup(switchGroup) ? switchGroup : FPSTR(_invalidgroup);
+      swGroups[FPSTR(_state)] = validateGroup(switchStateGroup) ? switchStateGroup : FPSTR(_invalidgroup);
 
       JsonObject absDimGroups = top.createNestedObject(F("Absolute Dim Groups"));
       absDimGroups[FPSTR(_enabled)] = enableAbsoluteDim;
-      absDimGroups[FPSTR(_group)] = validateGroup(absoluteDimGroup) ? absoluteDimGroup : "INVALID GROUP";
-      absDimGroups[FPSTR(_state)] = validateGroup(absoluteDimStateGroup) ? absoluteDimStateGroup : "INVALID GROUP";
+      absDimGroups[FPSTR(_group)] = validateGroup(absoluteDimGroup) ? absoluteDimGroup : FPSTR(_invalidgroup);
+      absDimGroups[FPSTR(_state)] = validateGroup(absoluteDimStateGroup) ? absoluteDimStateGroup : FPSTR(_invalidgroup);
       
     }
 
@@ -131,19 +133,19 @@ class KnxUsermod : public Usermod {
 
       JsonObject indivAddr = top[F("Individual Address")];
       configComplete = !indivAddr.isNull();
-      configComplete &= getJsonValue(indivAddr[FPSTR(_address)], individualAddress, "0.0.0");
+      configComplete &= getJsonValue(indivAddr[FPSTR(_address)], individualAddress, FPSTR(_invalidaddress));
 
       JsonObject swGroups = top[F("Switch Groups")];
       configComplete = !swGroups.isNull();      
       configComplete &= getJsonValue(swGroups[FPSTR(_enabled)], enableSwitch, false);
-      configComplete &= getJsonValue(swGroups[FPSTR(_group)], switchGroup, "0/0/0");
-      configComplete &= getJsonValue(swGroups[FPSTR(_state)], switchStateGroup, "0/0/0");
+      configComplete &= getJsonValue(swGroups[FPSTR(_group)], switchGroup, FPSTR(_invalidgroup));
+      configComplete &= getJsonValue(swGroups[FPSTR(_state)], switchStateGroup, FPSTR(_invalidgroup));
 
       JsonObject absDimGroups = top[F("Absolute Dim Groups")];
-      configComplete = !absDimGroups.isNull();      
+      configComplete = !absDimGroups.isNull();
       configComplete &= getJsonValue(absDimGroups[FPSTR(_enabled)], enableAbsoluteDim, false);
-      configComplete &= getJsonValue(absDimGroups[FPSTR(_group)], absoluteDimGroup, "0/0/0");
-      configComplete &= getJsonValue(absDimGroups[FPSTR(_state)], absoluteDimStateGroup, "0/0/0");
+      configComplete &= getJsonValue(absDimGroups[FPSTR(_group)], absoluteDimGroup, FPSTR(_invalidgroup));
+      configComplete &= getJsonValue(absDimGroups[FPSTR(_state)], absoluteDimStateGroup, FPSTR(_invalidgroup));
 
       return configComplete; 
     }
@@ -253,13 +255,23 @@ bool KnxUsermod::isTargetGroup(KnxTelegram telegram, const String& target) {
 
 bool KnxUsermod::validateAddress(const String& address) {
   bool validAddress = false;
-  int area, line, device;
-  int members = std::sscanf(address.c_str(), "%i.%i.%i", &area, &line, &device);
+  int area, line, device, members;
+  int dots = 0;
 
-  if (members == 3) {
-    // Devices should never have 0 as their "device" member
-    if ((0 <= area) && (area <= 15) && (0 <= line) && (line <= 15) && (1 <= device) && (device <= 255)) {
-      validAddress = true;
+  for (int i=0; i < address.length(); i++) {
+    if (address.c_str()[i] == '.') {
+      dots++;
+    }
+  }
+
+  if (dots == 2) {
+    members = std::sscanf(address.c_str(), "%i.%i.%i", &area, &line, &device);
+
+    if (members == 3) {
+      // Devices should never have 0 as their "device" member
+      if ((0 <= area) && (area <= 15) && (0 <= line) && (line <= 15) && (1 <= device) && (device <= 255)) {
+        validAddress = true;
+      }
     }
   }
 
@@ -268,27 +280,36 @@ bool KnxUsermod::validateAddress(const String& address) {
 
 bool KnxUsermod::validateGroup(const String& address) {
   bool validAddress = false;
-  int first, second, third;
+  int first, second, third, members;
+  int slashes = 0;
 
-  int members = std::sscanf(address.c_str(), "%i/%i/%i", &first, &second, &third);
-
-  // 3-level structure
-  if (members == 3 && ((first + second + third) != 0)) {
-    if ((0 <= first) && (first <= 31) && (0 <= second) && (second <= 7) && (0 <= third) && (third <= 255)) {
-      validAddress = true;
+  for (int i=0; i < address.length(); i++) {
+    if (address.c_str()[i] == '/') {
+      slashes++;
     }
   }
-  // 2-level structure
-  else if (members == 2 && ((first + second) != 0)) {
-    if ((0 <= first) && (first <= 31) && (0 <= second) && (second <= 2047)) {
-      validAddress = true;
+  
+  if (slashes < 3) {
+    members = std::sscanf(address.c_str(), "%i/%i/%i", &first, &second, &third);
+
+    // 3-level structure
+    if (members == 3 && ((first + second + third) != 0)) {
+      if ((0 <= first) && (first <= 31) && (0 <= second) && (second <= 7) && (0 <= third) && (third <= 255)) {
+        validAddress = true;
+      }
     }
-  }
-  // free structure
-  else if (members == 1 && (first != 0)) {
-    if (first <= 65535) {
-      validAddress = true;
+    // 2-level structure
+    else if (members == 2 && ((first + second) != 0)) {
+      if ((0 <= first) && (first <= 31) && (0 <= second) && (second <= 2047)) {
+        validAddress = true;
+      }
     }
+    // free structure
+    else if (members == 1 && (first != 0)) {
+      if (first <= 65535) {
+        validAddress = true;
+      }
+    }  
   }
 
   return validAddress; 
@@ -300,5 +321,7 @@ const char KnxUsermod::_enabled[] PROGMEM = "enabled";
 const char KnxUsermod::_address[]    PROGMEM = "address:";
 const char KnxUsermod::_group[]    PROGMEM = "group:";
 const char KnxUsermod::_state[] PROGMEM = "state:";
+const char KnxUsermod::_invalidaddress[] PROGMEM = "0.0.0";
+const char KnxUsermod::_invalidgroup[] PROGMEM = "0/0/0";
 const char KnxUsermod::_txPin[] PROGMEM = "TX-pin:";
 const char KnxUsermod::_rxPin[] PROGMEM = "RX-pin:";
