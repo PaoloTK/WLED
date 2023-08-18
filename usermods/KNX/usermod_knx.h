@@ -17,6 +17,7 @@ class KnxUsermod : public Usermod {
     static const char _address[];
     static const char _group[];
     static const char _state[];
+    static const char _time[];
     static const char _invalidaddress[];
     static const char _invalidgroup[];
     static const char _rxPin[];
@@ -32,8 +33,14 @@ class KnxUsermod : public Usermod {
     bool enableAbsoluteDim;
     String absoluteDimGroup;
     String absoluteDimStateGroup;
+    bool enableRelativeDim;
+    int relativeDimTime;
+    String relativeDimGroup;
+    bool isDimming = false;
+    bool dimUp = false;
 
     byte lastKnownBri = 0;
+    float relativeDimIncrement = 51; // 5 seconds for 0 to 100%
 
     std::unique_ptr<KnxTpUart> knxPtr;
 
@@ -43,12 +50,14 @@ class KnxUsermod : public Usermod {
     void initBus();
     // Read telegram from bus and adjust light if necessary
     void updateFromBus();
-    // KNX invidual addresses should be in the format X.Y.Z, with X and Y 0-15 and Z 0-255
+    // Dim light relatively based on bus telegrams
+    void dimLight();
+    // KNX invidual addresses should be in the format X.Y.Z, with X and Y 0-15 and Z 1-255
     bool validateAddress(const String& address);
-    // Group addresses can be in 3-level X/Y/Z (0-31/0-7/0-255), 2-level X/Z (0-31/0-2047) or free style Z (0-65535)
+    // Group addresses can be in 3-level X/Y/Z (0-31/0-7/0-255), 2-level X/Z (0-31/0-2047) or free style Z (0-65535), and the members can't add up to 0
     bool validateGroup(const String& address);
     // Does the telegram source group match the target group
-    bool isTargetGroup(const KnxTelegram telegram, const String& target);
+    bool isGroupTarget(const KnxTelegram telegram, const String& target);
 
   public:
 
@@ -60,6 +69,9 @@ class KnxUsermod : public Usermod {
       if (isEnabled()) {
         initBus();
         lastKnownBri = bri;
+
+        relativeDimIncrement = float(255) / relativeDimTime * 100;
+
       }
 
       initDone = true;
@@ -72,7 +84,9 @@ class KnxUsermod : public Usermod {
       if (millis() - lastTime > 100) {
         if (knxPtr) {
           updateFromBus();
+          dimLight();
         }
+
         lastTime = millis();
       }
     }
@@ -116,6 +130,12 @@ class KnxUsermod : public Usermod {
       absDimGroups[FPSTR(_enabled)] = enableAbsoluteDim;
       absDimGroups[FPSTR(_group)] = validateGroup(absoluteDimGroup) ? absoluteDimGroup : FPSTR(_invalidgroup);
       absDimGroups[FPSTR(_state)] = validateGroup(absoluteDimStateGroup) ? absoluteDimStateGroup : FPSTR(_invalidgroup);
+
+      JsonObject relDimGroups = top.createNestedObject(F("Relative Dim Groups"));
+      relDimGroups[FPSTR(_enabled)] = enableRelativeDim;
+      relDimGroups[FPSTR(_time)] = relativeDimTime;
+      relDimGroups[FPSTR(_group)] = validateGroup(relativeDimGroup) ? relativeDimGroup : FPSTR(_invalidgroup);
+
       
     }
 
@@ -147,6 +167,12 @@ class KnxUsermod : public Usermod {
       configComplete &= getJsonValue(absDimGroups[FPSTR(_group)], absoluteDimGroup, FPSTR(_invalidgroup));
       configComplete &= getJsonValue(absDimGroups[FPSTR(_state)], absoluteDimStateGroup, FPSTR(_invalidgroup));
 
+      JsonObject relDimGroups = top[F("Relative Dim Groups")];
+      configComplete = !relDimGroups.isNull();
+      configComplete &= getJsonValue(relDimGroups[FPSTR(_enabled)], enableRelativeDim, false);
+      configComplete &= getJsonValue(relDimGroups[FPSTR(_time)], relativeDimTime, 5000);
+      configComplete &= getJsonValue(relDimGroups[FPSTR(_group)], relativeDimGroup, FPSTR(_invalidgroup));
+
       return configComplete; 
     }
 
@@ -170,6 +196,14 @@ class KnxUsermod : public Usermod {
         absDimArr.add(absoluteDimGroup);
         JsonArray absDimStateArr = user.createNestedArray(F("Absolute dim state group:"));
         absDimStateArr.add(absoluteDimStateGroup);
+      }
+
+      if (enableRelativeDim) {
+        JsonArray relDimArr = user.createNestedArray(F("Relative dim group:"));
+        relDimArr.add(relativeDimGroup);
+        JsonArray relDimSpeedArr = user.createNestedArray(F("Relative dim speed:"));
+        relDimSpeedArr.add(relativeDimTime);
+        relDimSpeedArr.add(" ms");
       }
     }  
 
@@ -199,6 +233,9 @@ void KnxUsermod::initBus() {
       if (absoluteDimGroup != "0/0/0") {
         knxPtr->addListenGroupAddress(absoluteDimGroup);            
       }
+      if (relativeDimGroup != "0/0/0") {
+        knxPtr->addListenGroupAddress(relativeDimGroup);
+      }
     }
 
     Serial1.begin(19200, SERIAL_8E1, rxIo, txIo);
@@ -213,7 +250,7 @@ void KnxUsermod::updateFromBus() {
     KnxTelegram* telegram = knxPtr->getReceivedTelegram();
 
     // Switch group
-    if (isTargetGroup(*telegram, switchGroup)) {
+    if (isGroupTarget(*telegram, switchGroup)) {
       if (telegram->getBool()) {
         if (bri == 0) {
           bri = briLast;
@@ -228,16 +265,61 @@ void KnxUsermod::updateFromBus() {
       }
     }
     // Absolute Dim Group
-    if (isTargetGroup(*telegram, absoluteDimGroup)) {
+    if (isGroupTarget(*telegram, absoluteDimGroup)) {
       if (telegram->get1ByteIntValue()) {
         bri = telegram->get1ByteIntValue();
         stateUpdated(CALL_MODE_DIRECT_CHANGE);
       }
     }
+    // Relative Dim Group
+    if (isGroupTarget(*telegram, relativeDimGroup)) {
+      if (telegram->get4BitIntValue()) {
+        isDimming = true;
+        // @FIX only accounts for +100%/-100%
+        // 9 = +100%
+        if (telegram->get4BitIntValue() == 9) {
+          dimUp = true;
+        }
+        // 1 = -100%
+        else {
+          dimUp = false;
+        }
+      }
+      // 0 = dim button released
+      else {
+        isDimming = false;
+      }
+    }
+    
   }
 }
 
-bool KnxUsermod::isTargetGroup(KnxTelegram telegram, const String& target) {
+void KnxUsermod::dimLight() {
+  if (isDimming) {
+    if (dimUp) {
+      if (int(bri) + relativeDimIncrement > 255) {
+        bri = 255;
+        isDimming = false;
+      }
+      else {
+        bri += relativeDimIncrement;
+      }
+      stateUpdated(CALL_MODE_DIRECT_CHANGE);
+    }
+    else {
+      if (int(bri) - relativeDimIncrement < 1) {
+        bri = 1;
+        isDimming = false;
+      }
+      else {
+        bri -= relativeDimIncrement;
+      }
+      stateUpdated(CALL_MODE_DIRECT_CHANGE);
+    }
+  }
+}
+
+bool KnxUsermod::isGroupTarget(KnxTelegram telegram, const String& target) {
   String sourceGroup;
   int main, middle, sub;
 
@@ -321,6 +403,7 @@ const char KnxUsermod::_enabled[] PROGMEM = "enabled";
 const char KnxUsermod::_address[]    PROGMEM = "address:";
 const char KnxUsermod::_group[]    PROGMEM = "group:";
 const char KnxUsermod::_state[] PROGMEM = "state:";
+const char KnxUsermod::_time[] PROGMEM = "time:";
 const char KnxUsermod::_invalidaddress[] PROGMEM = "0.0.0";
 const char KnxUsermod::_invalidgroup[] PROGMEM = "0/0/0";
 const char KnxUsermod::_txPin[] PROGMEM = "TX-pin:";
