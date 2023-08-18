@@ -302,6 +302,7 @@ void KnxUsermod::dimLight() {
         isDimming = false;
       }
       else {
+        // @fix seems to not work with very high dim time values
         bri += relativeDimIncrement;
       }
       stateUpdated(CALL_MODE_DIRECT_CHANGE);
