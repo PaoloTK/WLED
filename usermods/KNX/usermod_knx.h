@@ -377,12 +377,6 @@ bool KnxUsermod::validateGroup(const String& address) {
   int slashes, members, first, second, third;
   
   slashes = countDelimiter(address, '/');
-
-  for (int i=0; i < address.length(); i++) {
-    if (address.c_str()[i] == '/') {
-      slashes++;
-    }
-  }
   
   if (slashes < 3) {
     members = std::sscanf(address.c_str(), "%i/%i/%i", &first, &second, &third);
