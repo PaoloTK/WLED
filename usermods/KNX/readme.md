@@ -42,3 +42,4 @@ Head over to the usermods settings page and you'll find a KNX section. Enable it
 - Add cleanup in case mod gets disabled
 - Update configuration if parameters change without restart
 - Add option to turn on/off light via dimming
+- Replace 0/0/0 with _invalidgroup

@@ -100,7 +100,9 @@ class KnxUsermod : public Usermod {
         if (bri != lastKnownBri) {
           lastKnownBri = bri;
           if (bri) {
+            // @FIX: only write if group is valid
             knxPtr->groupWriteBool(switchStateGroup, true);
+            knxPtr->groupWrite1ByteInt(absoluteDimStateGroup, bri);
           }
           else {
             knxPtr->groupWriteBool(switchStateGroup, false);
@@ -273,6 +275,7 @@ void KnxUsermod::updateFromBus() {
     }
     // Relative Dim Group
     if (isGroupTarget(*telegram, relativeDimGroup)) {
+      // @FIX maybe switch to case switch to handle all cases including 0
       if (telegram->get4BitIntValue()) {
         isDimming = true;
         // @FIX only accounts for +100%/-100%
