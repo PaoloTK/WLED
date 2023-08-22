@@ -36,9 +36,9 @@ class KnxUsermod : public Usermod {
     bool enableRelativeDim;
     int relativeDimTime;
     String relativeDimGroup;
+
     bool isDimming = false;
     bool dimUp = false;
-
     byte lastKnownBri = 0;
     float relativeDimIncrement = 51; // 5 seconds for 0 to 100%
 
@@ -52,6 +52,8 @@ class KnxUsermod : public Usermod {
     void updateFromBus();
     // Dim light relatively based on bus telegrams
     void dimLight();
+    // Count the delimiter in the address to validate and recognize address style
+    int countDelimiter(const String& address, const char delimiter);
     // KNX invidual addresses should be in the format X.Y.Z, with X and Y 0-15 and Z 1-255
     bool validateAddress(const String& address);
     // Group addresses can be in 3-level X/Y/Z (0-31/0-7/0-255), 2-level X/Z (0-31/0-2047) or free style Z (0-65535), and the members can't add up to 0
@@ -69,7 +71,7 @@ class KnxUsermod : public Usermod {
       if (isEnabled()) {
         initBus();
         lastKnownBri = bri;
-
+        // @FIX: relativeDimIncrement must update after config save too
         relativeDimIncrement = float(255) / relativeDimTime * 100;
 
       }
@@ -99,6 +101,7 @@ class KnxUsermod : public Usermod {
         // Light Switch State
         if (bri != lastKnownBri) {
           lastKnownBri = bri;
+
           if (bri) {
             // @FIX: only write if group is valid
             knxPtr->groupWriteBool(switchStateGroup, true);
@@ -323,6 +326,18 @@ void KnxUsermod::dimLight() {
   }
 }
 
+int KnxUsermod::countDelimiter(const String& address, const char delimiter) {
+  int delimits = 0;
+
+  for (int i=0; i < address.length(); i++) {
+    if (address.c_str()[i] == delimiter) {
+      delimits++;
+    }
+  }
+
+  return delimits;
+}
+
 bool KnxUsermod::isGroupTarget(KnxTelegram telegram, const String& target) {
   String sourceGroup;
   int main, middle, sub;
@@ -337,18 +352,11 @@ bool KnxUsermod::isGroupTarget(KnxTelegram telegram, const String& target) {
   return (target == sourceGroup) ? true : false;
 }
 
-
-
 bool KnxUsermod::validateAddress(const String& address) {
   bool validAddress = false;
-  int area, line, device, members;
-  int dots = 0;
-
-  for (int i=0; i < address.length(); i++) {
-    if (address.c_str()[i] == '.') {
-      dots++;
-    }
-  }
+  int dots, members, area, line, device;
+  
+  dots = countDelimiter(address, '.');
 
   if (dots == 2) {
     members = std::sscanf(address.c_str(), "%i.%i.%i", &area, &line, &device);
@@ -366,8 +374,9 @@ bool KnxUsermod::validateAddress(const String& address) {
 
 bool KnxUsermod::validateGroup(const String& address) {
   bool validAddress = false;
-  int first, second, third, members;
-  int slashes = 0;
+  int slashes, members, first, second, third;
+  
+  slashes = countDelimiter(address, '/');
 
   for (int i=0; i < address.length(); i++) {
     if (address.c_str()[i] == '/') {
