@@ -4,6 +4,13 @@
 #include "wled.h"
 #include <KnxTpUart.h>
 
+struct KnxFunction {
+  String name;
+  bool enabled;
+  String listenGroup;
+  String stateGroup;
+};
+
 class KnxUsermod : public Usermod {
 
   private:
@@ -23,19 +30,19 @@ class KnxUsermod : public Usermod {
     static const char _rxPin[];
     static const char _txPin[];
 
-    int8_t txIo; // TX pin to connect to RX pin from KNX UART device
-    int8_t rxIo; // RX pin to connect to TX pin from KNX UART device
+    int8_t txPin; // TX pin to connect to RX pin from KNX UART device
+    int8_t rxPin; // RX pin to connect to TX pin from KNX UART device
 
     String individualAddress;
-    bool enableSwitch;
-    String switchGroup;
-    String switchStateGroup;
-    bool enableAbsoluteDim;
-    String absoluteDimGroup;
-    String absoluteDimStateGroup;
-    bool enableRelativeDim;
+    KnxFunction switchFunction {"Switch"};
+    KnxFunction absoluteDimFunction {"Absolute dim"};
+    KnxFunction relativeDimFunction {"Relative dim"};
+    KnxFunction paletteFunction {"Palette"};
+    KnxFunction playlistFunction {"Playlist"};
+
     int relativeDimTime;
-    String relativeDimGroup;
+
+    std::vector<KnxFunction> knxFunctions;
 
     bool isDimming = false;
     bool dimUp = false;
@@ -50,6 +57,8 @@ class KnxUsermod : public Usermod {
     void initBus();
     // Read telegram from bus and adjust light if necessary
     void updateFromBus();
+    // Populate function vector
+    void populateKnxFunctions();
     // Dim light relatively based on bus telegrams
     void dimLight();
     // Count the delimiter in the address to validate and recognize address style
@@ -70,6 +79,8 @@ class KnxUsermod : public Usermod {
     void setup() {
       if (isEnabled()) {
         initBus();
+        populateKnxFunctions();
+
         lastKnownBri = bri;
         // @FIX: relativeDimIncrement must update after config save too
         relativeDimIncrement = float(255) / relativeDimTime * 100;
@@ -103,12 +114,12 @@ class KnxUsermod : public Usermod {
           lastKnownBri = bri;
 
           if (bri) {
-            // @FIX: only write if group is valid
-            knxPtr->groupWriteBool(switchStateGroup, true);
-            knxPtr->groupWrite1ByteInt(absoluteDimStateGroup, bri);
+            // @FIX: only write if group is valid, use ternary to remove else statement for switch state
+            knxPtr->groupWriteBool(switchFunction.stateGroup, true);
+            knxPtr->groupWrite1ByteInt(absoluteDimFunction.stateGroup, bri);
           }
           else {
-            knxPtr->groupWriteBool(switchStateGroup, false);
+            knxPtr->groupWriteBool(switchFunction.stateGroup, false);
           }
         }
       }
@@ -120,41 +131,40 @@ class KnxUsermod : public Usermod {
       top[FPSTR(_enabled)] = enabled;
 
       JsonObject pins = top.createNestedObject(F("Serial Pins"));
-      pins[FPSTR(_txPin)] = txIo;
-      pins[FPSTR(_rxPin)] = rxIo;
+      pins[FPSTR(_txPin)] = txPin;
+      pins[FPSTR(_rxPin)] = rxPin;
 
       JsonObject indivAddr = top.createNestedObject(F("Individual Address"));
       indivAddr[FPSTR(_address)] = validateAddress(individualAddress) ? individualAddress : FPSTR(_invalidaddress);
 
       JsonObject swGroups = top.createNestedObject(F("Switch Groups"));
-      swGroups[FPSTR(_enabled)] = enableSwitch;
-      swGroups[FPSTR(_group)] = validateGroup(switchGroup) ? switchGroup : FPSTR(_invalidgroup);
-      swGroups[FPSTR(_state)] = validateGroup(switchStateGroup) ? switchStateGroup : FPSTR(_invalidgroup);
+      swGroups[FPSTR(_enabled)] = switchFunction.enabled;
+      swGroups[FPSTR(_group)] = validateGroup(switchFunction.listenGroup) ? switchFunction.listenGroup : FPSTR(_invalidgroup);
+      swGroups[FPSTR(_state)] = validateGroup(switchFunction.stateGroup) ? switchFunction.stateGroup : FPSTR(_invalidgroup);
 
       JsonObject absDimGroups = top.createNestedObject(F("Absolute Dim Groups"));
-      absDimGroups[FPSTR(_enabled)] = enableAbsoluteDim;
-      absDimGroups[FPSTR(_group)] = validateGroup(absoluteDimGroup) ? absoluteDimGroup : FPSTR(_invalidgroup);
-      absDimGroups[FPSTR(_state)] = validateGroup(absoluteDimStateGroup) ? absoluteDimStateGroup : FPSTR(_invalidgroup);
+      absDimGroups[FPSTR(_enabled)] = absoluteDimFunction.enabled;
+      absDimGroups[FPSTR(_group)] = validateGroup(absoluteDimFunction.listenGroup) ? absoluteDimFunction.listenGroup : FPSTR(_invalidgroup);
+      absDimGroups[FPSTR(_state)] = validateGroup(absoluteDimFunction.stateGroup) ? absoluteDimFunction.stateGroup : FPSTR(_invalidgroup);
 
       JsonObject relDimGroups = top.createNestedObject(F("Relative Dim Groups"));
-      relDimGroups[FPSTR(_enabled)] = enableRelativeDim;
+      relDimGroups[FPSTR(_enabled)] = relativeDimFunction.enabled;
+      relDimGroups[FPSTR(_group)] = validateGroup(relativeDimFunction.listenGroup) ? relativeDimFunction.listenGroup : FPSTR(_invalidgroup);
       relDimGroups[FPSTR(_time)] = relativeDimTime;
-      relDimGroups[FPSTR(_group)] = validateGroup(relativeDimGroup) ? relativeDimGroup : FPSTR(_invalidgroup);
-
       
     }
 
     bool readFromConfig(JsonObject& root)
     {
       JsonObject top = root[FPSTR(_name)];
-
+      // @FIX - incorrect configcomplete
       bool configComplete = !top.isNull();
       configComplete &= getJsonValue(top[FPSTR(_enabled)], enabled);
 
       JsonObject pins = top[F("Serial Pins")];
       configComplete = !pins.isNull();
-      configComplete &= getJsonValue(pins[FPSTR(_rxPin)], rxIo, -1);
-      configComplete &= getJsonValue(pins[FPSTR(_txPin)], txIo, -1);
+      configComplete &= getJsonValue(pins[FPSTR(_rxPin)], rxPin, -1);
+      configComplete &= getJsonValue(pins[FPSTR(_txPin)], txPin, -1);
 
       JsonObject indivAddr = top[F("Individual Address")];
       configComplete = !indivAddr.isNull();
@@ -162,21 +172,21 @@ class KnxUsermod : public Usermod {
 
       JsonObject swGroups = top[F("Switch Groups")];
       configComplete = !swGroups.isNull();      
-      configComplete &= getJsonValue(swGroups[FPSTR(_enabled)], enableSwitch, false);
-      configComplete &= getJsonValue(swGroups[FPSTR(_group)], switchGroup, FPSTR(_invalidgroup));
-      configComplete &= getJsonValue(swGroups[FPSTR(_state)], switchStateGroup, FPSTR(_invalidgroup));
+      configComplete &= getJsonValue(swGroups[FPSTR(_enabled)], switchFunction.enabled, false);
+      configComplete &= getJsonValue(swGroups[FPSTR(_group)], switchFunction.listenGroup, FPSTR(_invalidgroup));
+      configComplete &= getJsonValue(swGroups[FPSTR(_state)], switchFunction.stateGroup, FPSTR(_invalidgroup));
 
       JsonObject absDimGroups = top[F("Absolute Dim Groups")];
       configComplete = !absDimGroups.isNull();
-      configComplete &= getJsonValue(absDimGroups[FPSTR(_enabled)], enableAbsoluteDim, false);
-      configComplete &= getJsonValue(absDimGroups[FPSTR(_group)], absoluteDimGroup, FPSTR(_invalidgroup));
-      configComplete &= getJsonValue(absDimGroups[FPSTR(_state)], absoluteDimStateGroup, FPSTR(_invalidgroup));
+      configComplete &= getJsonValue(absDimGroups[FPSTR(_enabled)], absoluteDimFunction.enabled, false);
+      configComplete &= getJsonValue(absDimGroups[FPSTR(_group)], absoluteDimFunction.listenGroup, FPSTR(_invalidgroup));
+      configComplete &= getJsonValue(absDimGroups[FPSTR(_state)], absoluteDimFunction.stateGroup, FPSTR(_invalidgroup));
 
       JsonObject relDimGroups = top[F("Relative Dim Groups")];
       configComplete = !relDimGroups.isNull();
-      configComplete &= getJsonValue(relDimGroups[FPSTR(_enabled)], enableRelativeDim, false);
+      configComplete &= getJsonValue(relDimGroups[FPSTR(_enabled)], relativeDimFunction.enabled, false);
+      configComplete &= getJsonValue(relDimGroups[FPSTR(_group)], relativeDimFunction.listenGroup, FPSTR(_invalidgroup));
       configComplete &= getJsonValue(relDimGroups[FPSTR(_time)], relativeDimTime, 5000);
-      configComplete &= getJsonValue(relDimGroups[FPSTR(_group)], relativeDimGroup, FPSTR(_invalidgroup));
 
       return configComplete; 
     }
@@ -189,27 +199,42 @@ class KnxUsermod : public Usermod {
 
       JsonArray addressArr = user.createNestedArray(F("Individual address:"));
       addressArr.add(individualAddress);
-      
-      if (enableSwitch) {
-        JsonArray switchArr = user.createNestedArray(F("Switch group:"));
-        switchArr.add(switchGroup);
-        JsonArray switchStateArr = user.createNestedArray(F("Switch state group:"));
-        switchStateArr.add(switchStateGroup);
-      }
-      if (enableAbsoluteDim) {
-        JsonArray absDimArr = user.createNestedArray(F("Absolute dim group:"));
-        absDimArr.add(absoluteDimGroup);
-        JsonArray absDimStateArr = user.createNestedArray(F("Absolute dim state group:"));
-        absDimStateArr.add(absoluteDimStateGroup);
+
+      for (size_t i = 0; i < knxFunctions.size(); ++i) {
+        if (knxFunctions[i].enabled) {
+          // @FIX String bool not working
+          if (knxFunctions[i].listenGroup && knxFunctions[i].listenGroup != FPSTR(_invalidgroup)) {
+            JsonArray listenArr = user.createNestedArray(knxFunctions[i].name + " listen group:");
+            listenArr.add(knxFunctions[i].listenGroup);
+          }
+          if (knxFunctions[i].stateGroup && knxFunctions[i].stateGroup != FPSTR(_invalidgroup)) {
+            JsonArray stateArr = user.createNestedArray(knxFunctions[i].name + " state group:");
+            stateArr.add(knxFunctions[i].stateGroup);
+          }
+        }
       }
 
-      if (enableRelativeDim) {
-        JsonArray relDimArr = user.createNestedArray(F("Relative dim group:"));
-        relDimArr.add(relativeDimGroup);
-        JsonArray relDimSpeedArr = user.createNestedArray(F("Relative dim speed:"));
-        relDimSpeedArr.add(relativeDimTime);
-        relDimSpeedArr.add(" ms");
-      }
+      
+      // if (switchFunction.enabled) {
+      //   JsonArray switchArr = user.createNestedArray(F("Switch group:"));
+      //   switchArr.add(switchFunction.listenGroup);
+      //   JsonArray switchStateArr = user.createNestedArray(F("Switch state group:"));
+      //   switchStateArr.add(switchFunction.stateGroup);
+      // }
+      // if (absoluteDimFunction.enabled) {
+      //   JsonArray absDimArr = user.createNestedArray(F("Absolute dim group:"));
+      //   absDimArr.add(absoluteDimFunction.listenGroup);
+      //   JsonArray absDimStateArr = user.createNestedArray(F("Absolute dim state group:"));
+      //   absDimStateArr.add(absoluteDimFunction.stateGroup);
+      // }
+
+      // if (relativeDimFunction.enabled) {
+      //   JsonArray relDimArr = user.createNestedArray(F("Relative dim group:"));
+      //   relDimArr.add(relativeDimFunction.listenGroup);
+      //   JsonArray relDimSpeedArr = user.createNestedArray(F("Relative dim speed:"));
+      //   relDimSpeedArr.add(relativeDimTime);
+      //   relDimSpeedArr.add(" ms");
+      // }
     }  
 
     uint16_t getId()
@@ -218,11 +243,19 @@ class KnxUsermod : public Usermod {
     }
 };
 
+void KnxUsermod::populateKnxFunctions() {
+  if (switchFunction.enabled) { knxFunctions.push_back(switchFunction); }
+  if (absoluteDimFunction.enabled) { knxFunctions.push_back(absoluteDimFunction); }
+  if (relativeDimFunction.enabled) { knxFunctions.push_back(relativeDimFunction); }
+  if (paletteFunction.enabled) { knxFunctions.push_back(paletteFunction); }
+  if (playlistFunction.enabled) { knxFunctions.push_back(playlistFunction); }
+}
+
 void KnxUsermod::allocatePins() {
-  PinManagerPinType pins[2] = { { txIo, true }, { rxIo, false } };
+  PinManagerPinType pins[2] = { { txPin, true }, { rxPin, false } };
   if (!pinManager.allocateMultiplePins(pins, 2, PinOwner::UM_KNX)) {
-    txIo = -1;
-    rxIo = -1;
+    txPin = -1;
+    rxPin = -1;
     return;
   }
 }
@@ -232,18 +265,19 @@ void KnxUsermod::initBus() {
     allocatePins();
     knxPtr = std::unique_ptr<KnxTpUart>(new KnxTpUart(&Serial1, individualAddress));
     if (knxPtr) {
-      if (switchGroup != "0/0/0") {
-        knxPtr->addListenGroupAddress(switchGroup);
+      // @FIX group should both exist and be different from invalidgroup
+      if (switchFunction.listenGroup != "0/0/0") {
+        knxPtr->addListenGroupAddress(switchFunction.listenGroup);
       }
-      if (absoluteDimGroup != "0/0/0") {
-        knxPtr->addListenGroupAddress(absoluteDimGroup);            
+      if (absoluteDimFunction.listenGroup != "0/0/0") {
+        knxPtr->addListenGroupAddress(absoluteDimFunction.listenGroup);            
       }
-      if (relativeDimGroup != "0/0/0") {
-        knxPtr->addListenGroupAddress(relativeDimGroup);
+      if (relativeDimFunction.listenGroup != "0/0/0") {
+        knxPtr->addListenGroupAddress(relativeDimFunction.listenGroup);
       }
     }
 
-    Serial1.begin(19200, SERIAL_8E1, rxIo, txIo);
+    Serial1.begin(19200, SERIAL_8E1, rxPin, txPin);
   }
 }
 
@@ -255,7 +289,7 @@ void KnxUsermod::updateFromBus() {
     KnxTelegram* telegram = knxPtr->getReceivedTelegram();
 
     // Switch group
-    if (isGroupTarget(*telegram, switchGroup)) {
+    if (isGroupTarget(*telegram, switchFunction.listenGroup)) {
       if (telegram->getBool()) {
         if (bri == 0) {
           bri = briLast;
@@ -270,14 +304,14 @@ void KnxUsermod::updateFromBus() {
       }
     }
     // Absolute Dim Group
-    if (isGroupTarget(*telegram, absoluteDimGroup)) {
+    if (isGroupTarget(*telegram, absoluteDimFunction.listenGroup)) {
       if (telegram->get1ByteIntValue()) {
         bri = telegram->get1ByteIntValue();
         stateUpdated(CALL_MODE_DIRECT_CHANGE);
       }
     }
     // Relative Dim Group
-    if (isGroupTarget(*telegram, relativeDimGroup)) {
+    if (isGroupTarget(*telegram, relativeDimFunction.listenGroup)) {
       // @FIX maybe switch to case switch to handle all cases including 0
       if (telegram->get4BitIntValue()) {
         isDimming = true;
