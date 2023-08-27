@@ -197,44 +197,32 @@ class KnxUsermod : public Usermod {
       JsonObject user = root["u"];
       if (user.isNull()) user = root.createNestedObject("u");
 
+      user.createNestedArray(FPSTR(_name));
+
       JsonArray addressArr = user.createNestedArray(F("Individual address:"));
       addressArr.add(individualAddress);
 
       for (size_t i = 0; i < knxFunctions.size(); ++i) {
         if (knxFunctions[i].enabled) {
-          // @FIX String bool not working
-          if (knxFunctions[i].listenGroup && knxFunctions[i].listenGroup != FPSTR(_invalidgroup)) {
-            JsonArray listenArr = user.createNestedArray(knxFunctions[i].name + " listen group:");
-            listenArr.add(knxFunctions[i].listenGroup);
+          String& listen = knxFunctions[i].listenGroup;
+          String& state = knxFunctions[i].stateGroup;
+          String& name = knxFunctions[i].name;
+
+          if (!listen.isEmpty() && listen != FPSTR(_invalidgroup)) {
+            JsonArray listenArr = user.createNestedArray(name + " listen group:");
+            listenArr.add(listen);
           }
-          if (knxFunctions[i].stateGroup && knxFunctions[i].stateGroup != FPSTR(_invalidgroup)) {
-            JsonArray stateArr = user.createNestedArray(knxFunctions[i].name + " state group:");
-            stateArr.add(knxFunctions[i].stateGroup);
+          if (!state.isEmpty() && state != FPSTR(_invalidgroup)) {
+            JsonArray stateArr = user.createNestedArray(name + " state group:");
+            stateArr.add(state);
+          }
+          if (name == "Relative dim") {
+            JsonArray relDimSpeedArr = user.createNestedArray(F("Relative dim speed:"));
+            relDimSpeedArr.add(relativeDimTime);
+            relDimSpeedArr.add(" ms");
           }
         }
       }
-
-      
-      // if (switchFunction.enabled) {
-      //   JsonArray switchArr = user.createNestedArray(F("Switch group:"));
-      //   switchArr.add(switchFunction.listenGroup);
-      //   JsonArray switchStateArr = user.createNestedArray(F("Switch state group:"));
-      //   switchStateArr.add(switchFunction.stateGroup);
-      // }
-      // if (absoluteDimFunction.enabled) {
-      //   JsonArray absDimArr = user.createNestedArray(F("Absolute dim group:"));
-      //   absDimArr.add(absoluteDimFunction.listenGroup);
-      //   JsonArray absDimStateArr = user.createNestedArray(F("Absolute dim state group:"));
-      //   absDimStateArr.add(absoluteDimFunction.stateGroup);
-      // }
-
-      // if (relativeDimFunction.enabled) {
-      //   JsonArray relDimArr = user.createNestedArray(F("Relative dim group:"));
-      //   relDimArr.add(relativeDimFunction.listenGroup);
-      //   JsonArray relDimSpeedArr = user.createNestedArray(F("Relative dim speed:"));
-      //   relDimSpeedArr.add(relativeDimTime);
-      //   relDimSpeedArr.add(" ms");
-      // }
     }  
 
     uint16_t getId()
