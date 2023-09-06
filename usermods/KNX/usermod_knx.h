@@ -4,11 +4,16 @@
 #include "wled.h"
 #include <KnxTpUart.h>
 
-struct KnxFunction {
+enum groupFunction {
+  Listen,
+  State
+};
+
+struct KnxGroup {
   String name;
+  groupFunction function;
   bool enabled;
-  String listenGroup;
-  String stateGroup;
+  String group;
 };
 
 class KnxUsermod : public Usermod {
@@ -22,7 +27,7 @@ class KnxUsermod : public Usermod {
     static const char _name[];
     static const char _enabled[];
     static const char _address[];
-    static const char _group[];
+    static const char _listen[];
     static const char _state[];
     static const char _time[];
     static const char _invalidaddress[];
@@ -34,15 +39,21 @@ class KnxUsermod : public Usermod {
     int8_t rxPin; // RX pin to connect to TX pin from KNX UART device
 
     String individualAddress;
-    KnxFunction switchFunction {"Switch"};
-    KnxFunction absoluteDimFunction {"Absolute dim"};
-    KnxFunction relativeDimFunction {"Relative dim"};
-    KnxFunction paletteFunction {"Palette"};
-    KnxFunction playlistFunction {"Playlist"};
+    KnxGroup switchListen {"Switch", Listen};
+    KnxGroup switchState {"Switch", State};
+    KnxGroup absoluteDimListen {"Absolute dim", Listen};
+    KnxGroup absoluteDimState {"Absolute dim", State};
+    KnxGroup presetListen {"Preset", Listen};
+    KnxGroup presetState {"Preset", State};    
+    KnxGroup playlistListen {"Playlist", Listen};
+    KnxGroup playlistState {"Playlist", State};
+
+    // No state for Relative Dim, use Absolute Dim State
+    KnxGroup relativeDimListen {"Relative dim", Listen};
 
     int relativeDimTime;
 
-    std::vector<KnxFunction> knxFunctions;
+    std::vector<KnxGroup> knxGroups;
 
     bool isDimming = false;
     bool dimUp = false;
@@ -58,7 +69,7 @@ class KnxUsermod : public Usermod {
     // Read telegram from bus and adjust light if necessary
     void updateFromBus();
     // Populate function vector
-    void populateKnxFunctions();
+    void populateKnxGroups();
     // Dim light relatively based on bus telegrams
     void dimLight();
     // Count the delimiter in the address to validate and recognize address style
@@ -79,7 +90,6 @@ class KnxUsermod : public Usermod {
     void setup() {
       if (isEnabled()) {
         initBus();
-        populateKnxFunctions();
 
         lastKnownBri = bri;
         // @FIX: relativeDimIncrement must update after config save too
@@ -115,11 +125,11 @@ class KnxUsermod : public Usermod {
 
           if (bri) {
             // @FIX: only write if group is valid, use ternary to remove else statement for switch state
-            knxPtr->groupWriteBool(switchFunction.stateGroup, true);
-            knxPtr->groupWrite1ByteInt(absoluteDimFunction.stateGroup, bri);
+            knxPtr->groupWriteBool(switchState.group, true);
+            knxPtr->groupWrite1ByteInt(absoluteDimState.group, bri);
           }
           else {
-            knxPtr->groupWriteBool(switchFunction.stateGroup, false);
+            knxPtr->groupWriteBool(switchState.group, false);
           }
         }
       }
@@ -127,6 +137,9 @@ class KnxUsermod : public Usermod {
 
     void addToConfig(JsonObject& root)
     {
+      // @FIX: calling populateKnxGroups() here so segments have had time to load
+      // populateKnxGroups();
+
       JsonObject top = root.createNestedObject(FPSTR(_name));
       top[FPSTR(_enabled)] = enabled;
 
@@ -137,56 +150,122 @@ class KnxUsermod : public Usermod {
       JsonObject indivAddr = top.createNestedObject(F("Individual Address"));
       indivAddr[FPSTR(_address)] = validateAddress(individualAddress) ? individualAddress : FPSTR(_invalidaddress);
 
-      JsonObject swGroups = top.createNestedObject(F("Switch Groups"));
-      swGroups[FPSTR(_enabled)] = switchFunction.enabled;
-      swGroups[FPSTR(_group)] = validateGroup(switchFunction.listenGroup) ? switchFunction.listenGroup : FPSTR(_invalidgroup);
-      swGroups[FPSTR(_state)] = validateGroup(switchFunction.stateGroup) ? switchFunction.stateGroup : FPSTR(_invalidgroup);
+      for (size_t i = 0; i < knxGroups.size(); ++i) {
+        String& group = knxGroups[i].group;
+        String& name = knxGroups[i].name;
+        // @FIX: Verify invalid function doesn't evaluates as listen
+        String function = (knxGroups[i].function == Listen) ? FPSTR(_listen) : FPSTR(_state);
 
-      JsonObject absDimGroups = top.createNestedObject(F("Absolute Dim Groups"));
-      absDimGroups[FPSTR(_enabled)] = absoluteDimFunction.enabled;
-      absDimGroups[FPSTR(_group)] = validateGroup(absoluteDimFunction.listenGroup) ? absoluteDimFunction.listenGroup : FPSTR(_invalidgroup);
-      absDimGroups[FPSTR(_state)] = validateGroup(absoluteDimFunction.stateGroup) ? absoluteDimFunction.stateGroup : FPSTR(_invalidgroup);
+        JsonObject functionObj = (top.getMember(name)) ? JsonObject(top.getMember(name)) : JsonObject(top.createNestedObject(name));
 
-      JsonObject relDimGroups = top.createNestedObject(F("Relative Dim Groups"));
-      relDimGroups[FPSTR(_enabled)] = relativeDimFunction.enabled;
-      relDimGroups[FPSTR(_group)] = validateGroup(relativeDimFunction.listenGroup) ? relativeDimFunction.listenGroup : FPSTR(_invalidgroup);
-      relDimGroups[FPSTR(_time)] = relativeDimTime;
+        functionObj[FPSTR(_enabled)] = knxGroups[i].enabled;
+        functionObj[function] = validateGroup(group) ? group : FPSTR(_invalidgroup);
+        if (name == relativeDimListen.name) {
+          functionObj[FPSTR(_time)] = relativeDimTime;
+        }
+        String test;
+        getJsonValue(functionObj[function], test, "AGG");
+        Serial.println("TEST: " + test);
+      }
+      
+
+      // for (size_t i = 0; i < knxFunctions.size(); ++i) {
+      //   String& listen = knxFunctions[i].listenGroup;
+      //   String& state = knxFunctions[i].stateGroup;
+      //   String& name = knxFunctions[i].name;
+
+      //   JsonObject functionObj = top.createNestedObject(name);
+      //   functionObj[FPSTR(_enabled)] = knxFunctions[i].enabled;
+      //   functionObj[FPSTR(_listen)] = validateGroup(listen) ? listen : FPSTR(_invalidgroup);
+      //   functionObj[FPSTR(_state)] = validateGroup(state) ? state : FPSTR(_invalidgroup);
+      //   if (name == relativeDimFunction.name) {
+      //     functionObj[FPSTR(_time)] = relativeDimTime;
+      //   }
+      // }
+
+      // JsonObject swGroups = top.createNestedObject(F("Switch Groups"));
+      // swGroups[FPSTR(_enabled)] = switchFunction.enabled;
+      // swGroups[FPSTR(_listen)] = validateGroup(switchFunction.listenGroup) ? switchFunction.listenGroup : FPSTR(_invalidgroup);
+      // swGroups[FPSTR(_state)] = validateGroup(switchFunction.stateGroup) ? switchFunction.stateGroup : FPSTR(_invalidgroup);
+
+      // JsonObject absDimGroups = top.createNestedObject(F("Absolute Dim Groups"));
+      // absDimGroups[FPSTR(_enabled)] = absoluteDimFunction.enabled;
+      // absDimGroups[FPSTR(_listen)] = validateGroup(absoluteDimFunction.listenGroup) ? absoluteDimFunction.listenGroup : FPSTR(_invalidgroup);
+      // absDimGroups[FPSTR(_state)] = validateGroup(absoluteDimFunction.stateGroup) ? absoluteDimFunction.stateGroup : FPSTR(_invalidgroup);
+
+      // JsonObject relDimGroups = top.createNestedObject(F("Relative Dim Groups"));
+      // relDimGroups[FPSTR(_enabled)] = relativeDimFunction.enabled;
+      // relDimGroups[FPSTR(_listen)] = validateGroup(relativeDimFunction.listenGroup) ? relativeDimFunction.listenGroup : FPSTR(_invalidgroup);
+      // relDimGroups[FPSTR(_time)] = relativeDimTime;
       
     }
 
     bool readFromConfig(JsonObject& root)
     {
       JsonObject top = root[FPSTR(_name)];
-      // @FIX - incorrect configcomplete
       bool configComplete = !top.isNull();
       configComplete &= getJsonValue(top[FPSTR(_enabled)], enabled);
 
       JsonObject pins = top[F("Serial Pins")];
-      configComplete = !pins.isNull();
+      configComplete &= !pins.isNull();
       configComplete &= getJsonValue(pins[FPSTR(_rxPin)], rxPin, -1);
       configComplete &= getJsonValue(pins[FPSTR(_txPin)], txPin, -1);
 
       JsonObject indivAddr = top[F("Individual Address")];
-      configComplete = !indivAddr.isNull();
+      configComplete &= !indivAddr.isNull();
       configComplete &= getJsonValue(indivAddr[FPSTR(_address)], individualAddress, FPSTR(_invalidaddress));
 
-      JsonObject swGroups = top[F("Switch Groups")];
-      configComplete = !swGroups.isNull();      
-      configComplete &= getJsonValue(swGroups[FPSTR(_enabled)], switchFunction.enabled, false);
-      configComplete &= getJsonValue(swGroups[FPSTR(_group)], switchFunction.listenGroup, FPSTR(_invalidgroup));
-      configComplete &= getJsonValue(swGroups[FPSTR(_state)], switchFunction.stateGroup, FPSTR(_invalidgroup));
+      // populateKnxGroups();
 
-      JsonObject absDimGroups = top[F("Absolute Dim Groups")];
-      configComplete = !absDimGroups.isNull();
-      configComplete &= getJsonValue(absDimGroups[FPSTR(_enabled)], absoluteDimFunction.enabled, false);
-      configComplete &= getJsonValue(absDimGroups[FPSTR(_group)], absoluteDimFunction.listenGroup, FPSTR(_invalidgroup));
-      configComplete &= getJsonValue(absDimGroups[FPSTR(_state)], absoluteDimFunction.stateGroup, FPSTR(_invalidgroup));
+      for (size_t i = 0; i < knxGroups.size(); ++i) {
+        String& group = knxGroups[i].group;
+        String& name = knxGroups[i].name;
+        // @FIX: Verify invalid function doesn't evaluates as listen
+        String function = (knxGroups[i].function == Listen) ? FPSTR(_listen) : FPSTR(_state);
 
-      JsonObject relDimGroups = top[F("Relative Dim Groups")];
-      configComplete = !relDimGroups.isNull();
-      configComplete &= getJsonValue(relDimGroups[FPSTR(_enabled)], relativeDimFunction.enabled, false);
-      configComplete &= getJsonValue(relDimGroups[FPSTR(_group)], relativeDimFunction.listenGroup, FPSTR(_invalidgroup));
-      configComplete &= getJsonValue(relDimGroups[FPSTR(_time)], relativeDimTime, 5000);
+        JsonObject functionObj = (top.getMember(name)) ? JsonObject(top.getMember(name)) : JsonObject(top.createNestedObject(name));
+
+        configComplete &= !functionObj.isNull();
+
+        configComplete &= getJsonValue(functionObj[FPSTR(_enabled)], knxGroups[i].enabled, false);
+        configComplete &= getJsonValue(functionObj[function], group, FPSTR(_invalidgroup));
+        if (name == relativeDimListen.name) {
+          configComplete &= getJsonValue(functionObj[FPSTR(_time)], relativeDimTime, 5000);
+        }
+      }
+
+      // for (size_t i = 0; i < knxFunctions.size(); ++i) {
+      //   String& listen = knxFunctions[i].listenGroup;
+      //   String& state = knxFunctions[i].stateGroup;
+      //   String& name = knxFunctions[i].name;
+
+      //   JsonObject functionObj = top.createNestedObject(name);
+      //   configComplete &= !functionObj.isNull();
+      //   configComplete &= getJsonValue(functionObj[FPSTR(_enabled)], knxFunctions[i].enabled, false);
+      //   configComplete &= getJsonValue(functionObj[FPSTR(_listen)], listen, FPSTR(_invalidgroup));
+      //   configComplete &= getJsonValue(functionObj[FPSTR(_state)], state, FPSTR(_invalidgroup));
+      //   if (name == relativeDimFunction.name) {
+      //     configComplete &= getJsonValue(functionObj[FPSTR(_time)], relativeDimTime, 5000);
+      //   }
+      // }
+
+      // JsonObject swGroups = top[F("Switch Groups")];
+      // configComplete &= !swGroups.isNull();      
+      // configComplete &= getJsonValue(swGroups[FPSTR(_enabled)], switchFunction.enabled, false);
+      // configComplete &= getJsonValue(swGroups[FPSTR(_listen)], switchFunction.listenGroup, FPSTR(_invalidgroup));
+      // configComplete &= getJsonValue(swGroups[FPSTR(_state)], switchFunction.stateGroup, FPSTR(_invalidgroup));
+
+      // JsonObject absDimGroups = top[F("Absolute Dim Groups")];
+      // configComplete &= !absDimGroups.isNull();
+      // configComplete &= getJsonValue(absDimGroups[FPSTR(_enabled)], absoluteDimFunction.enabled, false);
+      // configComplete &= getJsonValue(absDimGroups[FPSTR(_listen)], absoluteDimFunction.listenGroup, FPSTR(_invalidgroup));
+      // configComplete &= getJsonValue(absDimGroups[FPSTR(_state)], absoluteDimFunction.stateGroup, FPSTR(_invalidgroup));
+
+      // JsonObject relDimGroups = top[F("Relative Dim Groups")];
+      // configComplete &= !relDimGroups.isNull();
+      // configComplete &= getJsonValue(relDimGroups[FPSTR(_enabled)], relativeDimFunction.enabled, false);
+      // configComplete &= getJsonValue(relDimGroups[FPSTR(_listen)], relativeDimFunction.listenGroup, FPSTR(_invalidgroup));
+      // configComplete &= getJsonValue(relDimGroups[FPSTR(_time)], relativeDimTime, 5000);
 
       return configComplete; 
     }
@@ -202,27 +281,27 @@ class KnxUsermod : public Usermod {
       JsonArray addressArr = user.createNestedArray(F("Individual address:"));
       addressArr.add(individualAddress);
 
-      for (size_t i = 0; i < knxFunctions.size(); ++i) {
-        if (knxFunctions[i].enabled) {
-          String& listen = knxFunctions[i].listenGroup;
-          String& state = knxFunctions[i].stateGroup;
-          String& name = knxFunctions[i].name;
+      // for (size_t i = 0; i < knxFunctions.size(); ++i) {
+      //   if (knxFunctions[i].enabled) {
+      //     String& listen = knxFunctions[i].listenGroup;
+      //     String& state = knxFunctions[i].stateGroup;
+      //     String& name = knxFunctions[i].name;
 
-          if (!listen.isEmpty() && listen != FPSTR(_invalidgroup)) {
-            JsonArray listenArr = user.createNestedArray(name + " listen group:");
-            listenArr.add(listen);
-          }
-          if (!state.isEmpty() && state != FPSTR(_invalidgroup)) {
-            JsonArray stateArr = user.createNestedArray(name + " state group:");
-            stateArr.add(state);
-          }
-          if (name == "Relative dim") {
-            JsonArray relDimSpeedArr = user.createNestedArray(F("Relative dim speed:"));
-            relDimSpeedArr.add(relativeDimTime);
-            relDimSpeedArr.add(" ms");
-          }
-        }
-      }
+      //     if (!listen.isEmpty() && listen != FPSTR(_invalidgroup)) {
+      //       JsonArray listenArr = user.createNestedArray(name + " listen group:");
+      //       listenArr.add(listen);
+      //     }
+      //     if (!state.isEmpty() && state != FPSTR(_invalidgroup)) {
+      //       JsonArray stateArr = user.createNestedArray(name + " state group:");
+      //       stateArr.add(state);
+      //     }
+      //     if (&knxFunctions[i] == &relativeDimFunction) {
+      //       JsonArray relDimSpeedArr = user.createNestedArray(F("Relative dim speed:"));
+      //       relDimSpeedArr.add(relativeDimTime);
+      //       relDimSpeedArr.add(" ms");
+      //     }
+      //   }
+      // }
     }  
 
     uint16_t getId()
@@ -231,12 +310,85 @@ class KnxUsermod : public Usermod {
     }
 };
 
-void KnxUsermod::populateKnxFunctions() {
-  if (switchFunction.enabled) { knxFunctions.push_back(switchFunction); }
-  if (absoluteDimFunction.enabled) { knxFunctions.push_back(absoluteDimFunction); }
-  if (relativeDimFunction.enabled) { knxFunctions.push_back(relativeDimFunction); }
-  if (paletteFunction.enabled) { knxFunctions.push_back(paletteFunction); }
-  if (playlistFunction.enabled) { knxFunctions.push_back(playlistFunction); }
+void KnxUsermod::populateKnxGroups() {
+  // knxGroups.clear();
+
+  knxGroups.push_back(switchListen);
+  knxGroups.push_back(switchState);
+
+  knxGroups.push_back(absoluteDimListen);
+  knxGroups.push_back(absoluteDimState);
+
+  knxGroups.push_back(relativeDimListen);
+
+  knxGroups.push_back(presetListen);
+  knxGroups.push_back(presetState);
+
+  knxGroups.push_back(playlistListen);
+  knxGroups.push_back(playlistState);
+
+  for (size_t i = 0; i < strip.getSegmentsNum(); ++i) {
+    String segment = "Segment " + String(i) + " ";
+
+    // Disable repeated functions when working on one segment for now
+
+    // KnxGroup segSwitchListen {segment + "Switch", Listen};
+    // knxGroups.push_back(segSwitchListen);
+    // KnxGroup segSwitchState {segment + "Switch", State};
+    // knxGroups.push_back(segSwitchState);
+
+    // KnxGroup segAbsoluteDimListen {segment + "Absolute Dim", Listen};
+    // knxGroups.push_back(segAbsoluteDimListen);
+    // KnxGroup segAbsoluteDimState {segment + "Absolute Dim", State};
+    // knxGroups.push_back(segAbsoluteDimState);
+
+    // KnxGroup segRelativeDimListen {segment + "Relative Dim", Listen};
+    // knxGroups.push_back(segRelativeDimListen);
+
+    // KnxGroup segColorTemperatureListen {segment + "Color Temperature", Listen};
+    // knxGroups.push_back(segColorTemperatureListen);
+    // KnxGroup segColorTemperatureState {segment + "Color Temperature", State};
+    // knxGroups.push_back(segColorTemperatureState);
+
+    // 3 Color Slots
+    for (size_t j = 0; j < 3; ++j) {
+      String color = " " + String(j);
+      KnxGroup segColorListen {segment + "Color" + color, Listen};
+      knxGroups.push_back(segColorListen);
+      KnxGroup segColorState {segment + "Color" + color, State};
+      knxGroups.push_back(segColorState);
+      // Limited to first color for now
+      break; 
+    }
+
+    KnxGroup segEffectListen {segment + "Effect", Listen};
+    knxGroups.push_back(segEffectListen);
+    KnxGroup segEffectState {segment + "Effect", State};
+    knxGroups.push_back(segEffectState);
+
+    KnxGroup segSpeedListen {segment + "Speed", Listen};
+    knxGroups.push_back(segSpeedListen);
+    KnxGroup segSpeedState {segment + "Speed", State};
+    knxGroups.push_back(segSpeedState);
+
+    KnxGroup segIntensityListen {segment + "Intensity", Listen};
+    knxGroups.push_back(segIntensityListen);
+    KnxGroup segIntensityState {segment + "Intensity", State};
+    knxGroups.push_back(segIntensityState);
+
+    KnxGroup segPaletteListen {segment + "Palette", Listen};
+    knxGroups.push_back(segPaletteListen);
+    KnxGroup segPaletteState {segment + "Palette", State};
+    knxGroups.push_back(segPaletteState);
+
+    // Limited to one segment for now
+    break;
+  }
+
+  Serial.println("Groups:");
+  for (size_t j = 0; j < knxGroups.size(); ++j) {
+    Serial.println(knxGroups[j].name + ((knxGroups[j].function) ? " State" : " Listen"));
+  }
 }
 
 void KnxUsermod::allocatePins() {
@@ -253,15 +405,16 @@ void KnxUsermod::initBus() {
     allocatePins();
     knxPtr = std::unique_ptr<KnxTpUart>(new KnxTpUart(&Serial1, individualAddress));
     if (knxPtr) {
-      // @FIX group should both exist and be different from invalidgroup
-      if (switchFunction.listenGroup != "0/0/0") {
-        knxPtr->addListenGroupAddress(switchFunction.listenGroup);
-      }
-      if (absoluteDimFunction.listenGroup != "0/0/0") {
-        knxPtr->addListenGroupAddress(absoluteDimFunction.listenGroup);            
-      }
-      if (relativeDimFunction.listenGroup != "0/0/0") {
-        knxPtr->addListenGroupAddress(relativeDimFunction.listenGroup);
+      
+      for (size_t i = 0; i < knxGroups.size(); ++i) {
+        String group = knxGroups[i].group;
+        bool function = knxGroups[i].function;
+
+        if (!group.isEmpty() && 
+            validateGroup(group) && 
+            function == Listen) {
+          knxPtr->addListenGroupAddress(group);
+        }
       }
     }
 
@@ -277,7 +430,7 @@ void KnxUsermod::updateFromBus() {
     KnxTelegram* telegram = knxPtr->getReceivedTelegram();
 
     // Switch group
-    if (isGroupTarget(*telegram, switchFunction.listenGroup)) {
+    if (isGroupTarget(*telegram, switchListen.group)) {
       if (telegram->getBool()) {
         if (bri == 0) {
           bri = briLast;
@@ -292,14 +445,14 @@ void KnxUsermod::updateFromBus() {
       }
     }
     // Absolute Dim Group
-    if (isGroupTarget(*telegram, absoluteDimFunction.listenGroup)) {
+    if (isGroupTarget(*telegram, absoluteDimListen.group)) {
       if (telegram->get1ByteIntValue()) {
         bri = telegram->get1ByteIntValue();
         stateUpdated(CALL_MODE_DIRECT_CHANGE);
       }
     }
     // Relative Dim Group
-    if (isGroupTarget(*telegram, relativeDimFunction.listenGroup)) {
+    if (isGroupTarget(*telegram, relativeDimListen.group)) {
       // @FIX maybe switch to case switch to handle all cases including 0
       if (telegram->get4BitIntValue()) {
         isDimming = true;
@@ -430,7 +583,7 @@ bool KnxUsermod::validateGroup(const String& address) {
 const char KnxUsermod::_name[]    PROGMEM = "KNX";
 const char KnxUsermod::_enabled[] PROGMEM = "enabled";
 const char KnxUsermod::_address[]    PROGMEM = "address:";
-const char KnxUsermod::_group[]    PROGMEM = "group:";
+const char KnxUsermod::_listen[]    PROGMEM = "listen:";
 const char KnxUsermod::_state[] PROGMEM = "state:";
 const char KnxUsermod::_time[] PROGMEM = "time:";
 const char KnxUsermod::_invalidaddress[] PROGMEM = "0.0.0";
