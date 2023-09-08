@@ -150,23 +150,26 @@ class KnxUsermod : public Usermod {
       JsonObject indivAddr = top.createNestedObject(F("Individual Address"));
       indivAddr[FPSTR(_address)] = validateAddress(individualAddress) ? individualAddress : FPSTR(_invalidaddress);
 
-      for (size_t i = 0; i < knxGroups.size(); ++i) {
-        String& group = knxGroups[i].group;
-        String& name = knxGroups[i].name;
-        // @FIX: Verify invalid function doesn't evaluates as listen
-        String function = (knxGroups[i].function == Listen) ? FPSTR(_listen) : FPSTR(_state);
+      JsonObject test = top.createNestedObject(F("test"));
+      test["test"] = knxGroups[0].group;
 
-        JsonObject functionObj = (top.getMember(name)) ? JsonObject(top.getMember(name)) : JsonObject(top.createNestedObject(name));
+      // for (size_t i = 0; i < knxGroups.size(); ++i) {
+      //   String& group = knxGroups[i].group;
+      //   String& name = knxGroups[i].name;
+      //   // @FIX: Verify invalid function doesn't evaluates as listen
+      //   String function = (knxGroups[i].function == Listen) ? FPSTR(_listen) : FPSTR(_state);
 
-        functionObj[FPSTR(_enabled)] = knxGroups[i].enabled;
-        functionObj[function] = validateGroup(group) ? group : FPSTR(_invalidgroup);
-        if (name == relativeDimListen.name) {
-          functionObj[FPSTR(_time)] = relativeDimTime;
-        }
-        String test;
-        getJsonValue(functionObj[function], test, "AGG");
-        Serial.println("TEST: " + test);
-      }
+      //   JsonObject functionObj = (top.getMember(name)) ? JsonObject(top.getMember(name)) : JsonObject(top.createNestedObject(name));
+
+      //   functionObj[FPSTR(_enabled)] = knxGroups[i].enabled;
+      //   functionObj[function] = validateGroup(group) ? group : FPSTR(_invalidgroup);
+      //   if (name == relativeDimListen.name) {
+      //     functionObj[FPSTR(_time)] = relativeDimTime;
+      //   }
+      //   String test;
+      //   getJsonValue(functionObj[function], test, "AGG");
+      //   Serial.println("TEST: " + test);
+      // }
       
 
       // for (size_t i = 0; i < knxFunctions.size(); ++i) {
@@ -215,24 +218,31 @@ class KnxUsermod : public Usermod {
       configComplete &= !indivAddr.isNull();
       configComplete &= getJsonValue(indivAddr[FPSTR(_address)], individualAddress, FPSTR(_invalidaddress));
 
+      knxGroups.push_back(switchListen);
+      JsonObject test = top[F("test")];
+      configComplete &= !test.isNull();
+      configComplete &= getJsonValue(test["test"], knxGroups[0].group, "0/0/0");
+
+      Serial.println("Config Complete? " + String(configComplete));
+
       // populateKnxGroups();
 
-      for (size_t i = 0; i < knxGroups.size(); ++i) {
-        String& group = knxGroups[i].group;
-        String& name = knxGroups[i].name;
-        // @FIX: Verify invalid function doesn't evaluates as listen
-        String function = (knxGroups[i].function == Listen) ? FPSTR(_listen) : FPSTR(_state);
+      // for (size_t i = 0; i < knxGroups.size(); ++i) {
+      //   String& group = knxGroups[i].group;
+      //   String& name = knxGroups[i].name;
+      //   // @FIX: Verify invalid function doesn't evaluates as listen
+      //   String function = (knxGroups[i].function == Listen) ? FPSTR(_listen) : FPSTR(_state);
 
-        JsonObject functionObj = (top.getMember(name)) ? JsonObject(top.getMember(name)) : JsonObject(top.createNestedObject(name));
+      //   JsonObject functionObj = (top.getMember(name)) ? JsonObject(top.getMember(name)) : JsonObject(top.createNestedObject(name));
 
-        configComplete &= !functionObj.isNull();
+      //   configComplete &= !functionObj.isNull();
 
-        configComplete &= getJsonValue(functionObj[FPSTR(_enabled)], knxGroups[i].enabled, false);
-        configComplete &= getJsonValue(functionObj[function], group, FPSTR(_invalidgroup));
-        if (name == relativeDimListen.name) {
-          configComplete &= getJsonValue(functionObj[FPSTR(_time)], relativeDimTime, 5000);
-        }
-      }
+      //   configComplete &= getJsonValue(functionObj[FPSTR(_enabled)], knxGroups[i].enabled, false);
+      //   configComplete &= getJsonValue(functionObj[function], group, FPSTR(_invalidgroup));
+      //   if (name == relativeDimListen.name) {
+      //     configComplete &= getJsonValue(functionObj[FPSTR(_time)], relativeDimTime, 5000);
+      //   }
+      // }
 
       // for (size_t i = 0; i < knxFunctions.size(); ++i) {
       //   String& listen = knxFunctions[i].listenGroup;
