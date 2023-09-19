@@ -1,19 +1,37 @@
 #pragma once
 
-#include <cstdio>
 #include "wled.h"
+#include <cstdio>
 #include <KnxTpUart.h>
 
-enum groupFunction {
-  Listen,
-  State
+struct KnxFunction {
+  String name;
+  String input;
+  String output;
+  bool enabled;
 };
 
-struct KnxGroup {
-  String name;
-  groupFunction function;
-  bool enabled;
-  String group;
+struct MainFunctions {
+  KnxFunction onOff = {"On Off"};
+  KnxFunction absoluteDim = {"Absolute Dim"};
+  KnxFunction relativeDim = {"Relative Dim"};
+  KnxFunction Preset = {"Preset"};
+  KnxFunction Playlist = {"Playlist"};
+};
+
+struct SegmentFunctions {
+  String segment;
+  KnxFunction onOff = {"On Off"};
+  KnxFunction absoluteDim = {"Absolute Dim"};
+  KnxFunction relativeDim = {"Relative Dim"};
+  KnxFunction colorTemperature = {"Color Temperature"};
+  KnxFunction color1 = {"Color 1"};
+  KnxFunction color2 = {"Color 2"};
+  KnxFunction color3 = {"Color 3"};
+  KnxFunction effect = {"Effect"};
+  KnxFunction speed = {"Speed"};
+  KnxFunction intensity = {"Intensity"};
+  KnxFunction palette = {"Palette"};
 };
 
 class KnxUsermod : public Usermod {
@@ -39,21 +57,10 @@ class KnxUsermod : public Usermod {
     int8_t rxPin; // RX pin to connect to TX pin from KNX UART device
 
     String individualAddress;
-    KnxGroup switchListen {"Switch", Listen};
-    KnxGroup switchState {"Switch", State};
-    KnxGroup absoluteDimListen {"Absolute dim", Listen};
-    KnxGroup absoluteDimState {"Absolute dim", State};
-    KnxGroup presetListen {"Preset", Listen};
-    KnxGroup presetState {"Preset", State};    
-    KnxGroup playlistListen {"Playlist", Listen};
-    KnxGroup playlistState {"Playlist", State};
-
-    // No state for Relative Dim, use Absolute Dim State
-    KnxGroup relativeDimListen {"Relative dim", Listen};
-
     int relativeDimTime;
 
-    std::vector<KnxGroup> knxGroups;
+    MainFunctions mainFunctions;
+    std::vector<SegmentFunctions> segmentsFunctions;
 
     bool isDimming = false;
     bool dimUp = false;
@@ -68,8 +75,8 @@ class KnxUsermod : public Usermod {
     void initBus();
     // Read telegram from bus and adjust light if necessary
     void updateFromBus();
-    // Populate function vector
-    void populateKnxGroups();
+    // Populate groups vector
+    void populateSegmentsFunctions();
     // Dim light relatively based on bus telegrams
     void dimLight();
     // Count the delimiter in the address to validate and recognize address style
@@ -106,7 +113,7 @@ class KnxUsermod : public Usermod {
       // do your magic here
       if (millis() - lastTime > 100) {
         if (knxPtr) {
-          updateFromBus();
+          //updateFromBus();
           dimLight();
         }
 
@@ -137,8 +144,8 @@ class KnxUsermod : public Usermod {
 
     void addToConfig(JsonObject& root)
     {
-      // @FIX: calling populateKnxGroups() here so segments have had time to load
-      // populateKnxGroups();
+      // @FIX: calling populateGroupObjects() here so segments have had time to load
+      // populateGroupObjects();
 
       JsonObject top = root.createNestedObject(FPSTR(_name));
       top[FPSTR(_enabled)] = enabled;
@@ -150,18 +157,18 @@ class KnxUsermod : public Usermod {
       JsonObject indivAddr = top.createNestedObject(F("Individual Address"));
       indivAddr[FPSTR(_address)] = validateAddress(individualAddress) ? individualAddress : FPSTR(_invalidaddress);
 
-      JsonObject test = top.createNestedObject(F("test"));
-      test["test"] = knxGroups[0].group;
+      // JsonObject test = top.createNestedObject(F("test"));
+      // test["test"] = knxFunctions[0].group;
 
-      // for (size_t i = 0; i < knxGroups.size(); ++i) {
-      //   String& group = knxGroups[i].group;
-      //   String& name = knxGroups[i].name;
+      // for (size_t i = 0; i < knxFunctions.size(); ++i) {
+      //   String& group = knxFunctions[i].group;
+      //   String& name = knxFunctions[i].name;
       //   // @FIX: Verify invalid function doesn't evaluates as listen
-      //   String function = (knxGroups[i].function == Listen) ? FPSTR(_listen) : FPSTR(_state);
+      //   String function = (knxFunctions[i].function == Listen) ? FPSTR(_listen) : FPSTR(_state);
 
       //   JsonObject functionObj = (top.getMember(name)) ? JsonObject(top.getMember(name)) : JsonObject(top.createNestedObject(name));
 
-      //   functionObj[FPSTR(_enabled)] = knxGroups[i].enabled;
+      //   functionObj[FPSTR(_enabled)] = knxFunctions[i].enabled;
       //   functionObj[function] = validateGroup(group) ? group : FPSTR(_invalidgroup);
       //   if (name == relativeDimListen.name) {
       //     functionObj[FPSTR(_time)] = relativeDimTime;
@@ -218,31 +225,28 @@ class KnxUsermod : public Usermod {
       configComplete &= !indivAddr.isNull();
       configComplete &= getJsonValue(indivAddr[FPSTR(_address)], individualAddress, FPSTR(_invalidaddress));
 
-      knxGroups.push_back(switchListen);
-      JsonObject test = top[F("test")];
-      configComplete &= !test.isNull();
-      configComplete &= getJsonValue(test["test"], knxGroups[0].group, "0/0/0");
+      JsonObject mainFunc = top[F("Main")];
+      configComplete &= !mainFunc.isNull();
+      configComplete &= getJsonValue(mainFunc[FPSTR(_onOff)])
 
-      Serial.println("Config Complete? " + String(configComplete));
+      populateSegmentsFunctions();
 
-      // populateKnxGroups();
+      for (size_t i = 0; i < knxFunctions.size(); ++i) {
+        String& group = knxFunctions[i].group;
+        String& name = knxFunctions[i].name;
+        // @FIX: Verify invalid function doesn't evaluates as listen
+        String function = (knxFunctions[i].function == Listen) ? FPSTR(_listen) : FPSTR(_state);
 
-      // for (size_t i = 0; i < knxGroups.size(); ++i) {
-      //   String& group = knxGroups[i].group;
-      //   String& name = knxGroups[i].name;
-      //   // @FIX: Verify invalid function doesn't evaluates as listen
-      //   String function = (knxGroups[i].function == Listen) ? FPSTR(_listen) : FPSTR(_state);
+        JsonObject functionObj = (top.getMember(name)) ? JsonObject(top.getMember(name)) : JsonObject(top.createNestedObject(name));
 
-      //   JsonObject functionObj = (top.getMember(name)) ? JsonObject(top.getMember(name)) : JsonObject(top.createNestedObject(name));
+        configComplete &= !functionObj.isNull();
 
-      //   configComplete &= !functionObj.isNull();
-
-      //   configComplete &= getJsonValue(functionObj[FPSTR(_enabled)], knxGroups[i].enabled, false);
-      //   configComplete &= getJsonValue(functionObj[function], group, FPSTR(_invalidgroup));
-      //   if (name == relativeDimListen.name) {
-      //     configComplete &= getJsonValue(functionObj[FPSTR(_time)], relativeDimTime, 5000);
-      //   }
-      // }
+        configComplete &= getJsonValue(functionObj[FPSTR(_enabled)], knxFunctions[i].enabled, false);
+        configComplete &= getJsonValue(functionObj[function], group, FPSTR(_invalidgroup));
+        if (name == relativeDimListen.name) {
+          configComplete &= getJsonValue(functionObj[FPSTR(_time)], relativeDimTime, 5000);
+        }
+      }
 
       // for (size_t i = 0; i < knxFunctions.size(); ++i) {
       //   String& listen = knxFunctions[i].listenGroup;
@@ -320,84 +324,11 @@ class KnxUsermod : public Usermod {
     }
 };
 
-void KnxUsermod::populateKnxGroups() {
-  // knxGroups.clear();
-
-  knxGroups.push_back(switchListen);
-  knxGroups.push_back(switchState);
-
-  knxGroups.push_back(absoluteDimListen);
-  knxGroups.push_back(absoluteDimState);
-
-  knxGroups.push_back(relativeDimListen);
-
-  knxGroups.push_back(presetListen);
-  knxGroups.push_back(presetState);
-
-  knxGroups.push_back(playlistListen);
-  knxGroups.push_back(playlistState);
-
-  for (size_t i = 0; i < strip.getSegmentsNum(); ++i) {
-    String segment = "Segment " + String(i) + " ";
-
-    // Disable repeated functions when working on one segment for now
-
-    // KnxGroup segSwitchListen {segment + "Switch", Listen};
-    // knxGroups.push_back(segSwitchListen);
-    // KnxGroup segSwitchState {segment + "Switch", State};
-    // knxGroups.push_back(segSwitchState);
-
-    // KnxGroup segAbsoluteDimListen {segment + "Absolute Dim", Listen};
-    // knxGroups.push_back(segAbsoluteDimListen);
-    // KnxGroup segAbsoluteDimState {segment + "Absolute Dim", State};
-    // knxGroups.push_back(segAbsoluteDimState);
-
-    // KnxGroup segRelativeDimListen {segment + "Relative Dim", Listen};
-    // knxGroups.push_back(segRelativeDimListen);
-
-    // KnxGroup segColorTemperatureListen {segment + "Color Temperature", Listen};
-    // knxGroups.push_back(segColorTemperatureListen);
-    // KnxGroup segColorTemperatureState {segment + "Color Temperature", State};
-    // knxGroups.push_back(segColorTemperatureState);
-
-    // 3 Color Slots
-    for (size_t j = 0; j < 3; ++j) {
-      String color = " " + String(j);
-      KnxGroup segColorListen {segment + "Color" + color, Listen};
-      knxGroups.push_back(segColorListen);
-      KnxGroup segColorState {segment + "Color" + color, State};
-      knxGroups.push_back(segColorState);
-      // Limited to first color for now
-      break; 
-    }
-
-    KnxGroup segEffectListen {segment + "Effect", Listen};
-    knxGroups.push_back(segEffectListen);
-    KnxGroup segEffectState {segment + "Effect", State};
-    knxGroups.push_back(segEffectState);
-
-    KnxGroup segSpeedListen {segment + "Speed", Listen};
-    knxGroups.push_back(segSpeedListen);
-    KnxGroup segSpeedState {segment + "Speed", State};
-    knxGroups.push_back(segSpeedState);
-
-    KnxGroup segIntensityListen {segment + "Intensity", Listen};
-    knxGroups.push_back(segIntensityListen);
-    KnxGroup segIntensityState {segment + "Intensity", State};
-    knxGroups.push_back(segIntensityState);
-
-    KnxGroup segPaletteListen {segment + "Palette", Listen};
-    knxGroups.push_back(segPaletteListen);
-    KnxGroup segPaletteState {segment + "Palette", State};
-    knxGroups.push_back(segPaletteState);
-
-    // Limited to one segment for now
-    break;
-  }
-
-  Serial.println("Groups:");
-  for (size_t j = 0; j < knxGroups.size(); ++j) {
-    Serial.println(knxGroups[j].name + ((knxGroups[j].function) ? " State" : " Listen"));
+void KnxUsermod::populateSegmentsFunctions() {
+  for (size_t i = 0; i < MAX_NUM_SEGMENTS; ++i) {
+    SegmentFunctions functions;
+    functions.segment = "Segment " + i;
+    segmentsFunctions.push_back(functions);
   }
 }
 
@@ -416,14 +347,13 @@ void KnxUsermod::initBus() {
     knxPtr = std::unique_ptr<KnxTpUart>(new KnxTpUart(&Serial1, individualAddress));
     if (knxPtr) {
       
-      for (size_t i = 0; i < knxGroups.size(); ++i) {
-        String group = knxGroups[i].group;
-        bool function = knxGroups[i].function;
+      for (size_t i = 0; i < knxFunctions.size(); ++i) {
+        GroupObject input = knxFunctions[i].input;
+        String address = input.address;
 
-        if (!group.isEmpty() && 
-            validateGroup(group) && 
-            function == Listen) {
-          knxPtr->addListenGroupAddress(group);
+        if (!address.isEmpty() && 
+            validateGroup(address)) {
+          knxPtr->addListenGroupAddress(address);
         }
       }
     }
@@ -548,7 +478,9 @@ bool KnxUsermod::validateAddress(const String& address) {
 
     if (members == 3) {
       // Devices should never have 0 as their "device" member
-      if ((0 <= area) && (area <= 15) && (0 <= line) && (line <= 15) && (1 <= device) && (device <= 255)) {
+      if ((0 <= area) && (area <= 15) &&
+          (0 <= line) && (line <= 15) &&
+          (1 <= device) && (device <= 255)) {
         validAddress = true;
       }
     }
