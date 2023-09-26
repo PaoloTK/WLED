@@ -7,7 +7,9 @@ enum class ObjectFunction {
   Preset,
   Playlist,
   Color_Temperature,
-  Color,
+  Color_1,
+  Color_2,
+  Color_3,
   Effect,
   Speed,
   Intensity,
@@ -35,4 +37,49 @@ class GroupObject {
     , address(address)
     , enabled(enabled)
     { }
+
+    String getFunctionName() const;
+    String getTypeName() const;    
+    String getObjectName() const;
 };
+
+String GroupObject::getFunctionName() const {
+  String name;
+
+  switch (function) {
+    case ObjectFunction::Switch: name = "Switch"; break;
+    case ObjectFunction::Absolute_Dim: name = "Absolute dim"; break;
+    case ObjectFunction::Relative_Dim: name = "Relative dim"; break;
+    case ObjectFunction::Preset: name = "Preset"; break;
+    case ObjectFunction::Playlist: name = "Playlist"; break;
+    case ObjectFunction::Color_Temperature: name = "Color temperature"; break;
+    case ObjectFunction::Color_1: name = "Color 1"; break;
+    case ObjectFunction::Color_2: name = "Color 2"; break;
+    case ObjectFunction::Color_3: name = "Color 3"; break;
+    case ObjectFunction::Effect: name = "Effect"; break;
+    case ObjectFunction::Speed: name = "Speed"; break;
+    case ObjectFunction::Intensity: name = "Intensity"; break;
+    case ObjectFunction::Palette: name = "Palette"; break;
+    default: name = "Function";
+  }
+
+  return name;
+}
+
+String GroupObject::getTypeName() const {
+  String name;
+
+  switch (type) {
+    case ObjectType::Input: name = "Input"; break;
+    case ObjectType::Output: name = "Output"; break;
+    default: name = "Type";
+  }
+  
+  return name;
+}
+
+String GroupObject::getObjectName() const {
+  String name = getFunctionName() + " " + getTypeName();
+
+  return name;
+}

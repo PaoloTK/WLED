@@ -1,38 +1,9 @@
 #pragma once
 
+#include "GroupObject.h"
 #include "wled.h"
 #include <cstdio>
 #include <KnxTpUart.h>
-
-struct KnxFunction {
-  String name;
-  String input;
-  String output;
-  bool enabled;
-};
-
-struct MainFunctions {
-  KnxFunction onOff = {"On Off"};
-  KnxFunction absoluteDim = {"Absolute Dim"};
-  KnxFunction relativeDim = {"Relative Dim"};
-  KnxFunction Preset = {"Preset"};
-  KnxFunction Playlist = {"Playlist"};
-};
-
-struct SegmentFunctions {
-  String segment;
-  KnxFunction onOff = {"On Off"};
-  KnxFunction absoluteDim = {"Absolute Dim"};
-  KnxFunction relativeDim = {"Relative Dim"};
-  KnxFunction colorTemperature = {"Color Temperature"};
-  KnxFunction color1 = {"Color 1"};
-  KnxFunction color2 = {"Color 2"};
-  KnxFunction color3 = {"Color 3"};
-  KnxFunction effect = {"Effect"};
-  KnxFunction speed = {"Speed"};
-  KnxFunction intensity = {"Intensity"};
-  KnxFunction palette = {"Palette"};
-};
 
 class KnxUsermod : public Usermod {
 
@@ -59,8 +30,8 @@ class KnxUsermod : public Usermod {
     String individualAddress;
     int relativeDimTime;
 
-    MainFunctions mainFunctions;
-    std::vector<SegmentFunctions> segmentsFunctions;
+    std::vector<GroupObject> mainObjects;
+    std::vector<std::vector<GroupObject>> segmentsObjects;
 
     bool isDimming = false;
     bool dimUp = false;
@@ -75,8 +46,10 @@ class KnxUsermod : public Usermod {
     void initBus();
     // Read telegram from bus and adjust light if necessary
     void updateFromBus();
-    // Populate groups vector
-    void populateSegmentsFunctions();
+    // Populate group object vectors
+    void populateObjects();
+    // Push the required objects for each function
+    void pushObjects(std::vector<GroupObject>& objects, std::initializer_list<ObjectFunction> functions);
     // Dim light relatively based on bus telegrams
     void dimLight();
     // Count the delimiter in the address to validate and recognize address style
@@ -87,6 +60,8 @@ class KnxUsermod : public Usermod {
     bool validateGroup(const String& address);
     // Does the telegram source group match the target group
     bool isGroupTarget(const KnxTelegram telegram, const String& target);
+    // Returns object that matches function and type
+    GroupObject getObject(std::vector<GroupObject> objects, const ObjectFunction& function, const ObjectType& type);
 
   public:
 
@@ -130,23 +105,20 @@ class KnxUsermod : public Usermod {
         if (bri != lastKnownBri) {
           lastKnownBri = bri;
 
-          if (bri) {
-            // @FIX: only write if group is valid, use ternary to remove else statement for switch state
-            knxPtr->groupWriteBool(switchState.group, true);
-            knxPtr->groupWrite1ByteInt(absoluteDimState.group, bri);
-          }
-          else {
-            knxPtr->groupWriteBool(switchState.group, false);
-          }
+          // if (bri) {
+          //   // @FIX: only write if group is valid, use ternary to remove else statement for switch state
+          //   knxPtr->groupWriteBool(switchState.group, true);
+          //   knxPtr->groupWrite1ByteInt(absoluteDimState.group, bri);
+          // }
+          // else {
+          //   knxPtr->groupWriteBool(switchState.group, false);
+          // }
         }
       }
     }
 
     void addToConfig(JsonObject& root)
     {
-      // @FIX: calling populateGroupObjects() here so segments have had time to load
-      // populateGroupObjects();
-
       JsonObject top = root.createNestedObject(FPSTR(_name));
       top[FPSTR(_enabled)] = enabled;
 
@@ -157,8 +129,14 @@ class KnxUsermod : public Usermod {
       JsonObject indivAddr = top.createNestedObject(F("Individual Address"));
       indivAddr[FPSTR(_address)] = validateAddress(individualAddress) ? individualAddress : FPSTR(_invalidaddress);
 
-      // JsonObject test = top.createNestedObject(F("test"));
-      // test["test"] = knxFunctions[0].group;
+      for(const auto& object : mainObjects) {
+        String function = object.getFunctionName();
+        String type = object.getTypeName();
+        String address = object.address;
+
+        JsonObject functionObj = (top.getMember(function)) ? JsonObject(top.getMember(function)) : JsonObject(top.createNestedObject(function));
+        functionObj[type] = validateAddress(address) ? address : FPSTR(_invalidgroup);
+      }
 
       // for (size_t i = 0; i < knxFunctions.size(); ++i) {
       //   String& group = knxFunctions[i].group;
@@ -212,6 +190,9 @@ class KnxUsermod : public Usermod {
 
     bool readFromConfig(JsonObject& root)
     {
+      // Build vectors here before assigning values
+      populateObjects();
+
       JsonObject top = root[FPSTR(_name)];
       bool configComplete = !top.isNull();
       configComplete &= getJsonValue(top[FPSTR(_enabled)], enabled);
@@ -225,28 +206,34 @@ class KnxUsermod : public Usermod {
       configComplete &= !indivAddr.isNull();
       configComplete &= getJsonValue(indivAddr[FPSTR(_address)], individualAddress, FPSTR(_invalidaddress));
 
-      JsonObject mainFunc = top[F("Main")];
-      configComplete &= !mainFunc.isNull();
-      configComplete &= getJsonValue(mainFunc[FPSTR(_onOff)])
+      for(const auto& object : mainObjects) {
+        String function = object.getFunctionName();
+        String type = object.getTypeName();
+        String address = object.address;
 
-      populateSegmentsFunctions();
-
-      for (size_t i = 0; i < knxFunctions.size(); ++i) {
-        String& group = knxFunctions[i].group;
-        String& name = knxFunctions[i].name;
-        // @FIX: Verify invalid function doesn't evaluates as listen
-        String function = (knxFunctions[i].function == Listen) ? FPSTR(_listen) : FPSTR(_state);
-
-        JsonObject functionObj = (top.getMember(name)) ? JsonObject(top.getMember(name)) : JsonObject(top.createNestedObject(name));
-
+        JsonObject functionObj = (top.getMember(function)) ? JsonObject(top.getMember(function)) : JsonObject(top.createNestedObject(function));
         configComplete &= !functionObj.isNull();
 
-        configComplete &= getJsonValue(functionObj[FPSTR(_enabled)], knxFunctions[i].enabled, false);
-        configComplete &= getJsonValue(functionObj[function], group, FPSTR(_invalidgroup));
-        if (name == relativeDimListen.name) {
-          configComplete &= getJsonValue(functionObj[FPSTR(_time)], relativeDimTime, 5000);
-        }
+        configComplete &= getJsonValue(functionObj[type], address, FPSTR(_invalidgroup));
+
       }
+
+      // for (size_t i = 0; i < knxFunctions.size(); ++i) {
+      //   String& group = knxFunctions[i].group;
+      //   String& name = knxFunctions[i].name;
+      //   // @FIX: Verify invalid function doesn't evaluates as listen
+      //   String function = (knxFunctions[i].function == Listen) ? FPSTR(_listen) : FPSTR(_state);
+
+      //   JsonObject functionObj = (top.getMember(name)) ? JsonObject(top.getMember(name)) : JsonObject(top.createNestedObject(name));
+
+      //   configComplete &= !functionObj.isNull();
+
+      //   configComplete &= getJsonValue(functionObj[FPSTR(_enabled)], knxFunctions[i].enabled, false);
+      //   configComplete &= getJsonValue(functionObj[function], group, FPSTR(_invalidgroup));
+      //   if (name == relativeDimListen.name) {
+      //     configComplete &= getJsonValue(functionObj[FPSTR(_time)], relativeDimTime, 5000);
+      //   }
+      // }
 
       // for (size_t i = 0; i < knxFunctions.size(); ++i) {
       //   String& listen = knxFunctions[i].listenGroup;
@@ -324,11 +311,41 @@ class KnxUsermod : public Usermod {
     }
 };
 
-void KnxUsermod::populateSegmentsFunctions() {
+void KnxUsermod::populateObjects() {
+  mainObjects.clear();
+  segmentsObjects.clear();
+
+  pushObjects(mainObjects, {
+    ObjectFunction::Switch,
+    ObjectFunction::Absolute_Dim,
+    ObjectFunction::Relative_Dim,
+    ObjectFunction::Preset,
+    ObjectFunction::Playlist
+  });
+
   for (size_t i = 0; i < MAX_NUM_SEGMENTS; ++i) {
-    SegmentFunctions functions;
-    functions.segment = "Segment " + i;
-    segmentsFunctions.push_back(functions);
+    segmentsObjects.push_back(std::vector<GroupObject>());
+    
+    pushObjects(segmentsObjects[i], {
+      ObjectFunction::Switch,
+      ObjectFunction::Absolute_Dim,
+      ObjectFunction::Relative_Dim,
+      ObjectFunction::Color_Temperature,
+      ObjectFunction::Color_1,
+      ObjectFunction::Color_2,
+      ObjectFunction::Color_3,
+      ObjectFunction::Effect,
+      ObjectFunction::Speed,
+      ObjectFunction::Intensity,
+      ObjectFunction::Palette,      
+    });
+  }
+}
+
+void KnxUsermod::pushObjects(std::vector<GroupObject>& objects, std::initializer_list<ObjectFunction> functions) {
+  for (auto &function : functions) {
+    objects.push_back({function, ObjectType::Input});
+    objects.push_back({function, ObjectType::Output});
   }
 }
 
@@ -345,18 +362,18 @@ void KnxUsermod::initBus() {
   if (individualAddress) {
     allocatePins();
     knxPtr = std::unique_ptr<KnxTpUart>(new KnxTpUart(&Serial1, individualAddress));
-    if (knxPtr) {
+    // if (knxPtr) {
       
-      for (size_t i = 0; i < knxFunctions.size(); ++i) {
-        GroupObject input = knxFunctions[i].input;
-        String address = input.address;
+    //   for (size_t i = 0; i < knxFunctions.size(); ++i) {
+    //     GroupObject input = knxFunctions[i].input;
+    //     String address = input.address;
 
-        if (!address.isEmpty() && 
-            validateGroup(address)) {
-          knxPtr->addListenGroupAddress(address);
-        }
-      }
-    }
+    //     if (!address.isEmpty() && 
+    //         validateGroup(address)) {
+    //       knxPtr->addListenGroupAddress(address);
+    //     }
+    //   }
+    // }
 
     Serial1.begin(19200, SERIAL_8E1, rxPin, txPin);
   }
@@ -365,54 +382,54 @@ void KnxUsermod::initBus() {
 void KnxUsermod::updateFromBus() {
   KnxTpUartSerialEventType eType = knxPtr->serialEvent();
 
-  if (eType == KNX_TELEGRAM)
-  {
-    KnxTelegram* telegram = knxPtr->getReceivedTelegram();
+  // if (eType == KNX_TELEGRAM)
+  // {
+  //   KnxTelegram* telegram = knxPtr->getReceivedTelegram();
 
-    // Switch group
-    if (isGroupTarget(*telegram, switchListen.group)) {
-      if (telegram->getBool()) {
-        if (bri == 0) {
-          bri = briLast;
-          updateInterfaces(CALL_MODE_BUTTON);
-        }
-      }
-      else {
-        if (bri != 0) {
-          bri = 0;
-          updateInterfaces(CALL_MODE_BUTTON);
-        }
-      }
-    }
-    // Absolute Dim Group
-    if (isGroupTarget(*telegram, absoluteDimListen.group)) {
-      if (telegram->get1ByteIntValue()) {
-        bri = telegram->get1ByteIntValue();
-        stateUpdated(CALL_MODE_DIRECT_CHANGE);
-      }
-    }
-    // Relative Dim Group
-    if (isGroupTarget(*telegram, relativeDimListen.group)) {
-      // @FIX maybe switch to case switch to handle all cases including 0
-      if (telegram->get4BitIntValue()) {
-        isDimming = true;
-        // @FIX only accounts for +100%/-100%
-        // 9 = +100%
-        if (telegram->get4BitIntValue() == 9) {
-          dimUp = true;
-        }
-        // 1 = -100%
-        else {
-          dimUp = false;
-        }
-      }
-      // 0 = dim button released
-      else {
-        isDimming = false;
-      }
-    }
+  //   // Switch group
+  //   if (isGroupTarget(*telegram, switchListen.group)) {
+  //     if (telegram->getBool()) {
+  //       if (bri == 0) {
+  //         bri = briLast;
+  //         updateInterfaces(CALL_MODE_BUTTON);
+  //       }
+  //     }
+  //     else {
+  //       if (bri != 0) {
+  //         bri = 0;
+  //         updateInterfaces(CALL_MODE_BUTTON);
+  //       }
+  //     }
+  //   }
+  //   // Absolute Dim Group
+  //   if (isGroupTarget(*telegram, absoluteDimListen.group)) {
+  //     if (telegram->get1ByteIntValue()) {
+  //       bri = telegram->get1ByteIntValue();
+  //       stateUpdated(CALL_MODE_DIRECT_CHANGE);
+  //     }
+  //   }
+  //   // Relative Dim Group
+  //   if (isGroupTarget(*telegram, relativeDimListen.group)) {
+  //     // @FIX maybe switch to case switch to handle all cases including 0
+  //     if (telegram->get4BitIntValue()) {
+  //       isDimming = true;
+  //       // @FIX only accounts for +100%/-100%
+  //       // 9 = +100%
+  //       if (telegram->get4BitIntValue() == 9) {
+  //         dimUp = true;
+  //       }
+  //       // 1 = -100%
+  //       else {
+  //         dimUp = false;
+  //       }
+  //     }
+  //     // 0 = dim button released
+  //     else {
+  //       isDimming = false;
+  //     }
+  //   }
     
-  }
+  // }
 }
 
 void KnxUsermod::dimLight() {
