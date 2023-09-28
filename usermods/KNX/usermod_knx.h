@@ -132,10 +132,30 @@ class KnxUsermod : public Usermod {
       for(const auto& object : mainObjects) {
         String function = object.getFunctionName();
         String type = object.getTypeName();
-        String address = object.address;
+        String address = object.getAddress();
+        String name = "Main " + function;
 
-        JsonObject functionObj = (top.getMember(function)) ? JsonObject(top.getMember(function)) : JsonObject(top.createNestedObject(function));
+        if (!top.containsKey(name)) {
+            top.createNestedObject(name);
+        }
+        JsonObject functionObj = top[name];
         functionObj[type] = validateAddress(address) ? address : FPSTR(_invalidgroup);
+      }
+
+      for (size_t i = 0; i < MAX_NUM_SEGMENTS; ++i) {
+        String segment = "Segment " + String(i) + " ";
+        for(const auto& object : segmentsObjects[i]) {
+          String function = object.getFunctionName();
+          String type = object.getTypeName();
+          String address = object.getAddress();
+          String name = segment + function;
+
+          if (!top.containsKey(name)) {
+              top.createNestedObject(name);
+          }
+          JsonObject functionObj = top[name];
+          functionObj[type] = validateAddress(address) ? address : FPSTR(_invalidgroup);
+        }
       }
 
       // for (size_t i = 0; i < knxFunctions.size(); ++i) {
@@ -209,14 +229,38 @@ class KnxUsermod : public Usermod {
       for(const auto& object : mainObjects) {
         String function = object.getFunctionName();
         String type = object.getTypeName();
-        String address = object.address;
+        String address = object.getAddress();
+        String name = "Main " + function;
 
-        JsonObject functionObj = (top.getMember(function)) ? JsonObject(top.getMember(function)) : JsonObject(top.createNestedObject(function));
+        if (!top.containsKey(name)) {
+            top.createNestedObject(name);
+        }
+        JsonObject functionObj = top[name];
+
         configComplete &= !functionObj.isNull();
 
         configComplete &= getJsonValue(functionObj[type], address, FPSTR(_invalidgroup));
-
       }
+
+      for (size_t i = 0; i < MAX_NUM_SEGMENTS; ++i) {
+        String segment = "Segment " + String(i) + " ";
+
+        for(const auto& object : segmentsObjects[i]) {
+          String function = object.getFunctionName();
+          String type = object.getTypeName();
+          String address = object.getAddress();
+          String name = segment + function;
+
+          if (!top.containsKey(name)) {
+              top.createNestedObject(name);
+          }
+          JsonObject functionObj = top[name];
+
+          configComplete &= !functionObj.isNull();
+
+          configComplete &= getJsonValue(functionObj[type], address, FPSTR(_invalidgroup));
+        }
+      }      
 
       // for (size_t i = 0; i < knxFunctions.size(); ++i) {
       //   String& group = knxFunctions[i].group;

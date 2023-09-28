@@ -38,10 +38,15 @@ class GroupObject {
     , enabled(enabled)
     { }
 
+    String getAddress() const;
     String getFunctionName() const;
     String getTypeName() const;    
     String getObjectName() const;
 };
+
+String GroupObject::getAddress() const {
+  return address;
+}
 
 String GroupObject::getFunctionName() const {
   String name;
