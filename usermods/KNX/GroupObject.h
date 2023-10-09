@@ -22,29 +22,31 @@ enum class ObjectType {
 };
 
 class GroupObject {
+  private:
+
   public:
     ObjectFunction function;
     ObjectType type;
-    String address;
+    std::array<uint8_t, 3> address;
     bool enabled;
 
     GroupObject(ObjectFunction function,
                 ObjectType type,
-                String address = "0/0/0", // @FIX: change to invalidgroup[]
+                std::array<uint8_t, 3> address = {0, 0, 0},
                 bool enabled = false)
     : function(function)
     , type(type)
-    , address(address)
+    , address{address[0], address[1], address[2]}
     , enabled(enabled)
     { }
 
-    String getAddress() const;
+    uint8_t getAddress() const;
     String getFunctionName() const;
     String getTypeName() const;    
     String getObjectName() const;
 };
 
-String GroupObject::getAddress() const {
+uint8_t GroupObject::getAddress() const {
   return address;
 }
 

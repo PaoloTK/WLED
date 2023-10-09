@@ -54,7 +54,7 @@ class KnxUsermod : public Usermod {
     void dimLight();
     // Count the delimiter in the address to validate and recognize address style
     int countDelimiter(const String& address, const char delimiter);
-    // KNX invidual addresses should be in the format X.Y.Z, with X and Y 0-15 and Z 1-255
+    // KNX individual addresses should be in the format X.Y.Z, with X and Y 0-15 and Z 1-255
     bool validateAddress(const String& address);
     // Group addresses can be in 3-level X/Y/Z (0-31/0-7/0-255), 2-level X/Z (0-31/0-2047) or free style Z (0-65535), and the members can't add up to 0
     bool validateGroup(const String& address);
