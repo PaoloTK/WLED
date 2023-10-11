@@ -70,7 +70,7 @@ bool PhysicalAddress::fromString(const char *address)
     }
 
     if (dots != 2) {
-        // Too few dots (there must be 3 dots)
+        // Too few dots (there must be 2 dots)
         return false;
     }
 

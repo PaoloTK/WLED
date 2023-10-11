@@ -37,9 +37,6 @@ class KNXAddress: public Printable
         KNXAddress(const uint8_t *address);
         virtual ~KNXAddress() {}
 
-        bool fromString(const char *address);
-        bool fromString(const String &address) { return fromString(address.c_str()); }
-
         // Overloaded cast operator to allow KNXAddress objects to be used where a pointer
         // to a two-byte uint8_t array is expected
         operator uint16_t() const

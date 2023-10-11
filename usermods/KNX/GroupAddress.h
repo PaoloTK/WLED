@@ -39,7 +39,8 @@ String GroupAddress::toString() const
 bool GroupAddress::fromString(const char *address)
 {
     uint16_t acc = 0;
-    uint8_t slash = 0;
+    uint16_t sum = 0;
+    uint8_t slashes = 0;
 
     while (*address)
     {
@@ -48,20 +49,21 @@ bool GroupAddress::fromString(const char *address)
         {
             acc = acc * 10 + (c - '0');
 
-            // First two members must be 0-15, third 1-255
-            if (acc > 255 ||
-                (parts < 2 && acc > 15) ||
-                (parts == 2 && acc == 0)) { {
+            // First member max value is 31, second is 15, third is 255
+            if ((slashes == 0 && acc > 31) ||
+                (slashes == 1 && acc > 15) ||
+                acc > 255) {
                 return false;
             }
         }
-        else if (c == '.')
+        else if (c == '/')
         {
-            if (dots == 2) {
-                // Too much dots (there must be 2 dots)
+            if (slashes == 2) {
+                // Too many dots (there must be 2 dots)
                 return false;
             }
-            _address.bytes[dots++] = acc;
+            _address.bytes[slashes++] = acc;
+            sum+=acc;
             acc = 0;
         }
         else
@@ -71,10 +73,16 @@ bool GroupAddress::fromString(const char *address)
         }
     }
 
-    if (dots != 2) {
-        // Too few dots (there must be 3 dots)
+    if (slashes != 2) {
+        // Too few slashes (there must be 2 slashes)
         return false;
     }
+
+    // Sum of members should not be 0
+    if (sum == 0) {
+        return false;
+    }
+
     _address.bytes[2] = acc;
     return true;
 }
