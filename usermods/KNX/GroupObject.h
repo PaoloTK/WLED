@@ -1,4 +1,5 @@
 #include "wled.h"
+#include "GroupAddress.h"
 
 enum class ObjectFunction {
   Switch,
@@ -27,27 +28,27 @@ class GroupObject {
   public:
     ObjectFunction function;
     ObjectType type;
-    std::array<uint8_t, 3> address;
+    GroupAddress address;
     bool enabled;
 
     GroupObject(ObjectFunction function,
                 ObjectType type,
-                std::array<uint8_t, 3> address = {0, 0, 0},
+                GroupAddress address,
                 bool enabled = false)
     : function(function)
     , type(type)
-    , address{address[0], address[1], address[2]}
+    , address(address)
     , enabled(enabled)
     { }
 
-    uint8_t getAddress() const;
+    String getAddress() const;
     String getFunctionName() const;
     String getTypeName() const;    
     String getObjectName() const;
 };
 
-uint8_t GroupObject::getAddress() const {
-  return address;
+String GroupObject::getAddress() const {
+  return address.toString();
 }
 
 String GroupObject::getFunctionName() const {

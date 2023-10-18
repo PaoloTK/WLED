@@ -1,5 +1,6 @@
 #pragma once
 
+#include "PhysicalAddress.h"
 #include "GroupObject.h"
 #include "wled.h"
 #include <cstdio>
@@ -19,7 +20,7 @@ class KnxUsermod : public Usermod {
     static const char _listen[];
     static const char _state[];
     static const char _time[];
-    static const char _invalidaddress[];
+    static const char _invalidphysical[];
     static const char _invalidgroup[];
     static const char _rxPin[];
     static const char _txPin[];
@@ -27,7 +28,7 @@ class KnxUsermod : public Usermod {
     int8_t txPin; // TX pin to connect to RX pin from KNX UART device
     int8_t rxPin; // RX pin to connect to TX pin from KNX UART device
 
-    String individualAddress;
+    PhysicalAddress physicalAddress;
     int relativeDimTime;
 
     std::vector<GroupObject> mainObjects;
@@ -52,12 +53,6 @@ class KnxUsermod : public Usermod {
     void pushObjects(std::vector<GroupObject>& objects, std::initializer_list<ObjectFunction> functions);
     // Dim light relatively based on bus telegrams
     void dimLight();
-    // Count the delimiter in the address to validate and recognize address style
-    int countDelimiter(const String& address, const char delimiter);
-    // KNX individual addresses should be in the format X.Y.Z, with X and Y 0-15 and Z 1-255
-    bool validateAddress(const String& address);
-    // Group addresses can be in 3-level X/Y/Z (0-31/0-7/0-255), 2-level X/Z (0-31/0-2047) or free style Z (0-65535), and the members can't add up to 0
-    bool validateGroup(const String& address);
     // Does the telegram source group match the target group
     bool isGroupTarget(const KnxTelegram telegram, const String& target);
     // Returns object that matches function and type
@@ -126,8 +121,8 @@ class KnxUsermod : public Usermod {
       pins[FPSTR(_txPin)] = txPin;
       pins[FPSTR(_rxPin)] = rxPin;
 
-      JsonObject indivAddr = top.createNestedObject(F("Individual Address"));
-      indivAddr[FPSTR(_address)] = validateAddress(individualAddress) ? individualAddress : FPSTR(_invalidaddress);
+      JsonObject physAddr = top.createNestedObject(F("Physical Address"));
+      physAddr[FPSTR(_address)] = physicalAddress.toString() ? physicalAddress.toString() : FPSTR(_invalidphysical);
 
       for(const auto& object : mainObjects) {
         String function = object.getFunctionName();
@@ -139,7 +134,7 @@ class KnxUsermod : public Usermod {
             top.createNestedObject(name);
         }
         JsonObject functionObj = top[name];
-        functionObj[type] = validateAddress(address) ? address : FPSTR(_invalidgroup);
+        functionObj[type] = address ? address : FPSTR(_invalidgroup);
       }
 
       for (size_t i = 0; i < MAX_NUM_SEGMENTS; ++i) {
@@ -222,9 +217,9 @@ class KnxUsermod : public Usermod {
       configComplete &= getJsonValue(pins[FPSTR(_rxPin)], rxPin, -1);
       configComplete &= getJsonValue(pins[FPSTR(_txPin)], txPin, -1);
 
-      JsonObject indivAddr = top[F("Individual Address")];
-      configComplete &= !indivAddr.isNull();
-      configComplete &= getJsonValue(indivAddr[FPSTR(_address)], individualAddress, FPSTR(_invalidaddress));
+      JsonObject physAddr = top[F("Individual Address")];
+      configComplete &= !physAddr.isNull();
+      configComplete &= getJsonValue(physAddr[FPSTR(_address)], physicalAddress, FPSTR(_invalidphysical));
 
       for(const auto& object : mainObjects) {
         String function = object.getFunctionName();
@@ -324,7 +319,7 @@ class KnxUsermod : public Usermod {
       user.createNestedArray(FPSTR(_name));
 
       JsonArray addressArr = user.createNestedArray(F("Individual address:"));
-      addressArr.add(individualAddress);
+      addressArr.add(physicalAddress);
 
       // for (size_t i = 0; i < knxFunctions.size(); ++i) {
       //   if (knxFunctions[i].enabled) {
@@ -403,9 +398,9 @@ void KnxUsermod::allocatePins() {
 }
 
 void KnxUsermod::initBus() {
-  if (individualAddress) {
+  if (physicalAddress) {
     allocatePins();
-    knxPtr = std::unique_ptr<KnxTpUart>(new KnxTpUart(&Serial1, individualAddress));
+    knxPtr = std::unique_ptr<KnxTpUart>(new KnxTpUart(&Serial1, physicalAddress));
     // if (knxPtr) {
       
     //   for (size_t i = 0; i < knxFunctions.size(); ++i) {
@@ -502,18 +497,6 @@ void KnxUsermod::dimLight() {
   }
 }
 
-int KnxUsermod::countDelimiter(const String& address, const char delimiter) {
-  int delimits = 0;
-
-  for (int i=0; i < address.length(); i++) {
-    if (address.c_str()[i] == delimiter) {
-      delimits++;
-    }
-  }
-
-  return delimits;
-}
-
 bool KnxUsermod::isGroupTarget(KnxTelegram telegram, const String& target) {
   String sourceGroup;
   int main, middle, sub;
@@ -528,60 +511,6 @@ bool KnxUsermod::isGroupTarget(KnxTelegram telegram, const String& target) {
   return (target == sourceGroup) ? true : false;
 }
 
-bool KnxUsermod::validateAddress(const String& address) {
-  bool validAddress = false;
-  int dots, members, area, line, device;
-  
-  dots = countDelimiter(address, '.');
-
-  if (dots == 2) {
-    members = std::sscanf(address.c_str(), "%i.%i.%i", &area, &line, &device);
-
-    if (members == 3) {
-      // Devices should never have 0 as their "device" member
-      if ((0 <= area) && (area <= 15) &&
-          (0 <= line) && (line <= 15) &&
-          (1 <= device) && (device <= 255)) {
-        validAddress = true;
-      }
-    }
-  }
-
-  return validAddress;
-}
-
-bool KnxUsermod::validateGroup(const String& address) {
-  bool validAddress = false;
-  int slashes, members, first, second, third;
-  
-  slashes = countDelimiter(address, '/');
-  
-  if (slashes < 3) {
-    members = std::sscanf(address.c_str(), "%i/%i/%i", &first, &second, &third);
-
-    // 3-level structure
-    if (members == 3 && ((first + second + third) != 0)) {
-      if ((0 <= first) && (first <= 31) && (0 <= second) && (second <= 7) && (0 <= third) && (third <= 255)) {
-        validAddress = true;
-      }
-    }
-    // 2-level structure
-    else if (members == 2 && ((first + second) != 0)) {
-      if ((0 <= first) && (first <= 31) && (0 <= second) && (second <= 2047)) {
-        validAddress = true;
-      }
-    }
-    // free structure
-    else if (members == 1 && (first != 0)) {
-      if (first <= 65535) {
-        validAddress = true;
-      }
-    }  
-  }
-
-  return validAddress; 
-}
-
 // add more strings here to reduce flash memory usage
 const char KnxUsermod::_name[]    PROGMEM = "KNX";
 const char KnxUsermod::_enabled[] PROGMEM = "enabled";
@@ -589,7 +518,7 @@ const char KnxUsermod::_address[]    PROGMEM = "address:";
 const char KnxUsermod::_listen[]    PROGMEM = "listen:";
 const char KnxUsermod::_state[] PROGMEM = "state:";
 const char KnxUsermod::_time[] PROGMEM = "time:";
-const char KnxUsermod::_invalidaddress[] PROGMEM = "0.0.0";
+const char KnxUsermod::_invalidphysical[] PROGMEM = "0.0.0";
 const char KnxUsermod::_invalidgroup[] PROGMEM = "0/0/0";
 const char KnxUsermod::_txPin[] PROGMEM = "TX-pin:";
 const char KnxUsermod::_rxPin[] PROGMEM = "RX-pin:";
