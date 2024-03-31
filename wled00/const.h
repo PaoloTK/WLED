@@ -239,6 +239,8 @@
 #define TYPE_UCS8904             29
 #define TYPE_SK6812_RGBW         30
 #define TYPE_TM1814              31
+//Quinled dig2analog (WS2814 chip to control analog LEDs (PWM)) (35)
+#define TYPE_DIG2ANALOG          35
 //"Analog" types (PWM) (32-47)
 #define TYPE_ONOFF               40            //binary output (relays etc.)
 #define TYPE_ANALOG_1CH          41            //single channel PWM. Uses value of brightest RGBW channel

@@ -1161,6 +1161,7 @@ class PolyBus {
         case TYPE_WS2812_WWA:
           return I_8266_U0_NEO_3 + offset;
         case TYPE_SK6812_RGBW:
+        case TYPE_DIG2ANALOG:
           return I_8266_U0_NEO_4 + offset;
         case TYPE_WS2811_400KHZ:
           return I_8266_U0_400_3 + offset;
@@ -1199,6 +1200,7 @@ class PolyBus {
         case TYPE_WS2812_WWA:
           return I_32_RN_NEO_3 + offset;
         case TYPE_SK6812_RGBW:
+        case TYPE_DIG2ANALOG:
           return I_32_RN_NEO_4 + offset;
         case TYPE_WS2811_400KHZ:
           return I_32_RN_400_3 + offset;
