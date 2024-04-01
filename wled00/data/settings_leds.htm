@@ -154,7 +154,7 @@
 				if (t > 28) return len*4 + dbl; //RGBW
 				return len*3 + dbl;
 			}
-			if (t > 31 && t < 48) return 5;	// analog
+			if (t > 35 && t < 48) return 5;	// analog
 			return len*3 + dbl;
 		}
 
@@ -196,7 +196,7 @@
 				}
 				if (change) {
 					gId("rf"+n).checked = (gId("rf"+n).checked || t == 31); // LEDs require data in off state
-					if (t > 31 && t < 48) d.getElementsByName("LC"+n)[0].value = 1; // for sanity change analog count just to 1 LED
+					if (t > 35 && t < 48) d.getElementsByName("LC"+n)[0].value = 1; // for sanity change analog count just to 1 LED
 				}
 				gId("rf"+n).onclick = (t == 31) ? (()=>{return false}) : (()=>{});  // prevent change for TM1814
 				gRGBW |= isRGBW = ((t > 17 && t < 22) || (t > 28 && t < 36) || (t > 40 && t < 46 && t != 43) || t == 88); // RGBW checkbox, TYPE_xxxx values from const.h
@@ -322,7 +322,7 @@
 			if (i<1) return 0;
 			v = parseInt(d.getElementsByName("LS"+(i-1))[0].value) + parseInt(d.getElementsByName("LC"+(i-1))[0].value);
 			var t = parseInt(d.getElementsByName("LT"+(i-1))[0].value);
-			if (t > 31 && t < 48) v = 1; //PWM busses
+			if (t > 35 && t < 48) v = 1; //PWM busses
 			if (isNaN(v)) return 0;
 			return v;
 		}
