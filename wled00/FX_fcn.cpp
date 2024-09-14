@@ -1286,6 +1286,7 @@ void WS2812FX::finalizeInit() {
                   clash = true;
                   break;
                 }
+              }
             }
             if (clash) defPin[j]++;
           } while (clash);
