@@ -242,6 +242,10 @@
 #include "../usermods/LD2410_v2/usermod_ld2410.h"
 #endif
 
+#ifdef USERMOD_KNX
+#include "../usermods/KNX/usermod_knx.h"
+#endif
+
 void registerUsermods()
 {
 /*
@@ -469,5 +473,9 @@ void registerUsermods()
 
   #ifdef USERMOD_POV_DISPLAY
   usermods.add(new PovDisplayUsermod());
+  #endif
+
+  #ifdef USERMOD_KNX
+  usermods.add(new KnxUsermod());
   #endif
 }
