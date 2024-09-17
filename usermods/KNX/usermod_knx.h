@@ -104,6 +104,7 @@ class KnxUsermod : public Usermod {
      */
     void appendConfigData() override
     {
+      // @FIX Verify if String.c_str() is more efficient than just hardcoding the strings
       // addInfo('KNX:TX pin',1,'Connect to RX Pin on bus coupler')"
       oappend(SET_F("addInfo('"));
       oappend(String(FPSTR(_name)).c_str());
