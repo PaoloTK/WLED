@@ -10,16 +10,13 @@ class KnxUsermod : public Usermod {
     bool initDone = false;
     unsigned long lastTime = 0;
 
-    int8_t knxPins[2];
+    int8_t txPin, rxPin;
     int16_t individualAddress;
     // KnxTpUart* knxPtr;
 
     // string that are used multiple times (this will save some flash memory)
-    static const char _name[];
-    static const char _enabled[];
-    static const char _individualAddress[];
-    static const char _tx[];
-    static const char _rx[];
+    static const char _name[], _enabled[], _pin[], _txPin[], _rxPin[],
+                      _individualAddress[], _connectTo[], _onBusCoupler[];
 
     // Allocate pins for the bus connection
     void allocatePins();
@@ -74,10 +71,8 @@ class KnxUsermod : public Usermod {
     {
       JsonObject top = root.createNestedObject(FPSTR(_name));
       top[FPSTR(_enabled)] = enabled;
-      JsonObject pins = top.createNestedObject(F("Serial Pins"));
-      JsonArray pinArray = pins.createNestedArray("pin");
-      pinArray.add(knxPins[0]);
-      pinArray.add(knxPins[1]);
+      top[FPSTR(_txPin)] = txPin;
+      top[FPSTR(_rxPin)] = rxPin;
     }
 
     bool readFromConfig(JsonObject& root) override
@@ -86,11 +81,8 @@ class KnxUsermod : public Usermod {
 
       bool configComplete = !top.isNull();
       configComplete &= getJsonValue(top[FPSTR(_enabled)], enabled);
-
-      JsonObject pins = top[F("Serial Pins")];
-      configComplete = !pins.isNull();
-      configComplete &= getJsonValue(pins["pin"][0], knxPins[0], -1);
-      configComplete &= getJsonValue(pins["pin"][1], knxPins[1], -1);
+      configComplete &= getJsonValue(top[FPSTR(_txPin)], txPin);
+      configComplete &= getJsonValue(top[FPSTR(_rxPin)], rxPin);
 
 
     //   // A 3-argument getJsonValue() assigns the 3rd argument as a default value if the Json value is missing
@@ -112,6 +104,26 @@ class KnxUsermod : public Usermod {
      */
     void appendConfigData() override
     {
+      // addInfo('KNX:TX pin',1,'Connect to RX Pin on bus coupler')"
+      oappend(SET_F("addInfo('"));
+      oappend(String(FPSTR(_name)).c_str());
+      oappend(SET_F(":"));
+      oappend(String(FPSTR(_txPin)).c_str());
+      oappend(SET_F("',1,'"));
+      oappend(String(FPSTR(_connectTo)).c_str());
+      oappend(String(FPSTR(_rxPin)).c_str());
+      oappend(String(FPSTR(_onBusCoupler)).c_str());
+      oappend(SET_F("');"));
+      // addInfo('KNX:TX pin',1,'Connect to TX Pin on bus coupler')"
+      oappend(SET_F("addInfo('"));
+      oappend(String(FPSTR(_name)).c_str());
+      oappend(SET_F(":"));
+      oappend(String(FPSTR(_rxPin)).c_str());
+      oappend(SET_F("',1,'"));
+      oappend(String(FPSTR(_connectTo)).c_str());
+      oappend(String(FPSTR(_txPin)).c_str());
+      oappend(String(FPSTR(_onBusCoupler)).c_str());
+      oappend(SET_F("');"));
     }
   
 #ifndef WLED_DISABLE_MQTT
@@ -137,10 +149,10 @@ class KnxUsermod : public Usermod {
 };
 
 void KnxUsermod::allocatePins() {
-  PinManagerPinType pins[2] = { { knxPins[0], true }, { knxPins[1], false } };
+  PinManagerPinType pins[2] = { { txPin, true }, { rxPin, false } };
   if (!pinManager.allocateMultiplePins(pins, 2, PinOwner::UM_KNX)) {
-    knxPins[0] = -1;
-    knxPins[1] = -1;
+    txPin = -1;
+    rxPin = -1;
     // @FIX Add user facing error
     return;
   }
@@ -148,8 +160,10 @@ void KnxUsermod::allocatePins() {
 
 
 // add more strings here to reduce flash memory usage
-const char KnxUsermod::_name[]    PROGMEM = "KnxUsermod";
-const char KnxUsermod::_enabled[] PROGMEM = "enabled";
-const char KnxUsermod::_individualAddress[] PROGMEM = "IndividualAddress:";
-const char KnxUsermod::_tx[] PROGMEM = "TX:";
-const char KnxUsermod::_rx[] PROGMEM = "RX:";
+const char KnxUsermod::_name[] PROGMEM              = "KNX";
+const char KnxUsermod::_enabled[] PROGMEM           = "enabled";
+const char KnxUsermod::_txPin[] PROGMEM             = "TX pin";
+const char KnxUsermod::_rxPin[] PROGMEM             = "RX pin";
+const char KnxUsermod::_connectTo[] PROGMEM         = "Connect to ";
+const char KnxUsermod::_onBusCoupler[] PROGMEM      = " on bus coupler";
+const char KnxUsermod::_individualAddress[] PROGMEM = "individual address";
