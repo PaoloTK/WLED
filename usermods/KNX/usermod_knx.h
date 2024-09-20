@@ -5,7 +5,19 @@
 
 class KnxUsermod : public Usermod {
 
+enum class Structure {
+  FREE,
+  TWO_LEVEL,
+  THREE_LEVEL
+};
+
+enum class AddressType {
+  INDIVIDUAL,
+  GROUP
+};
+
   private:
+
     bool enabled = false;
     bool initDone = false;
     unsigned long lastTime = 0;
@@ -19,6 +31,8 @@ class KnxUsermod : public Usermod {
 
     // Allocate pins for the bus connection
     void allocatePins();
+    char addressToString(AddressType type, const uint16_t address);
+    bool addressFromString(AddressType type, const char *address);
 
   public:
     inline void enable(bool enable) { enabled = enable; }
@@ -137,6 +151,13 @@ void KnxUsermod::allocatePins() {
   }
 }
 
+bool KnxUsermod::addressToString(AddressType type, const uint16_t address)
+{
+}
+
+bool KnxUsermod::addressFromString(AddressType type, const char *address)
+{
+}
 
 // add more strings here to reduce flash memory usage
 const char KnxUsermod::_name[] PROGMEM              = "KNX";
