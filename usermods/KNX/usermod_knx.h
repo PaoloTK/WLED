@@ -31,8 +31,8 @@ enum class AddressType {
 
     // Allocate pins for the bus connection
     void allocatePins();
-    char addressToString(AddressType type, const uint16_t address);
-    bool addressFromString(AddressType type, const char *address);
+    char* addressToString(AddressType type, const uint16_t address);
+    uint16_t addressFromString(AddressType type, const char *address);
 
   public:
     inline void enable(bool enable) { enabled = enable; }
@@ -151,12 +151,72 @@ void KnxUsermod::allocatePins() {
   }
 }
 
-bool KnxUsermod::addressToString(AddressType type, const uint16_t address)
+char *KnxUsermod::addressToString(AddressType type, const uint16_t address)
 {
+  // XX.XX.XXX + 1
+  char addr[10];
+
+  if (type == AddressType::INDIVIDUAL) {
+    snprintf(addr, sizeof(address), "%d.%d.%d", (address >> 12) & 0x0F, (address >> 8) & 0x0F, address & 0xFF);
+  }
+
+  return addr;
 }
 
-bool KnxUsermod::addressFromString(AddressType type, const char *address)
+uint16_t KnxUsermod::addressFromString(AddressType type, const char *address)
 {
+  uint16_t  addr,
+            first, second, third,
+            delim, acc;
+  bool valid = true;
+
+  if (type == AddressType::INDIVIDUAL) {
+    while (*address & valid) {
+      char c = *address++;
+      if (c >= '0' && c <= '9')
+      {
+          acc = acc * 10 + (c - '0');
+          // Highest address 15.15.255
+          valid = (delim < 2) ? acc <= 15 : acc <= 255;
+      }
+      else if (c == '.')
+      {
+        switch (delim) {
+          case 0:
+            addr |= acc << 12;
+            break;
+          case 1:
+            addr |= acc << 8;
+            break;
+          default:
+            // Too many dots
+            valid = false;
+            break;
+        }
+        acc = 0;
+        delim++;
+      }
+      else
+      {
+        // Invalid character
+        valid = false;
+        break;
+      }
+    }
+
+    if (delim != 2) {
+        // Not enough dots
+        valid = false;
+    }
+
+    if (valid) {
+      return addr;
+    }
+    else {
+      // @FIX Add user facing error
+      return 0;
+    }
+  }
 }
 
 // add more strings here to reduce flash memory usage
