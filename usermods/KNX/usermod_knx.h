@@ -23,7 +23,7 @@ enum class AddressType {
     unsigned long lastTime = 0;
 
     int8_t txPin, rxPin;
-    int16_t individualAddress;
+    int16_t individualAddress = 0x3D10;
     // KnxTpUart* knxPtr;
 
     static const char _name[], _enabled[], _pin[], _txPin[], _rxPin[],
@@ -90,24 +90,31 @@ void KnxUsermod::readFromJsonState(JsonObject& root)
   }
 }
 
-void KnxUsermod::KnxUsermod::addToConfig(JsonObject& root)
+void KnxUsermod::addToConfig(JsonObject& root)
 {
+  char* IA = addressToString(AddressType::INDIVIDUAL, individualAddress);
+
   JsonObject top = root.createNestedObject(FPSTR(_name));
   top[FPSTR(_enabled)] = enabled;
   top[FPSTR(_txPin)] = txPin;
   top[FPSTR(_rxPin)] = rxPin;
-  top[FPSTR(_individualAddress)] = individualAddress;
+  top[FPSTR(_individualAddress)] = IA;
+  delete[] IA;
+
 }
 
 bool KnxUsermod::readFromConfig(JsonObject& root)
 {
+  const char* IA;
   JsonObject top = root[FPSTR(_name)];
 
   bool configComplete = !top.isNull();
   configComplete &= getJsonValue(top[FPSTR(_enabled)], enabled);
   configComplete &= getJsonValue(top[FPSTR(_txPin)], txPin);
   configComplete &= getJsonValue(top[FPSTR(_rxPin)], rxPin);
-  configComplete &= getJsonValue(top[FPSTR(_individualAddress)], individualAddress);
+  configComplete &= getJsonValue(top[FPSTR(_individualAddress)], IA);
+
+  individualAddress = addressFromString(AddressType::INDIVIDUAL, IA);
 
   return configComplete;
 }
@@ -154,10 +161,10 @@ void KnxUsermod::allocatePins() {
 char *KnxUsermod::addressToString(AddressType type, const uint16_t address)
 {
   // XX.XX.XXX + 1
-  char addr[10];
+  char* addr = new char[10];
 
   if (type == AddressType::INDIVIDUAL) {
-    snprintf(addr, sizeof(address), "%d.%d.%d", (address >> 12) & 0x0F, (address >> 8) & 0x0F, address & 0xFF);
+    sprintf(addr, "%d.%d.%d", (address >> 12) & 0x0F, (address >> 8) & 0x0F, address & 0xFF);
   }
 
   return addr;
@@ -167,7 +174,7 @@ uint16_t KnxUsermod::addressFromString(AddressType type, const char *address)
 {
   uint16_t  addr,
             first, second, third,
-            delim, acc;
+            delim = 0, acc = 0;
   bool valid = true;
 
   if (type == AddressType::INDIVIDUAL) {
@@ -209,11 +216,21 @@ uint16_t KnxUsermod::addressFromString(AddressType type, const char *address)
         valid = false;
     }
 
+    addr |= acc;
+
+      DEBUG_PRINTLN("ADDRESS");
+      DEBUG_PRINTLN("ADDRESS");
+      DEBUG_PRINTLN("ADDRESS");
+      DEBUG_PRINTLN("ADDRESS");
+      DEBUG_PRINTLN(addr);
+
     if (valid) {
+
       return addr;
     }
     else {
       // @FIX Add user facing error
+      // @FIX add invalid device address check (x.x.0 is invalid or similar)
       return 0;
     }
   }
