@@ -1,6 +1,7 @@
 #pragma once
 
 #include "wled.h"
+#include "individual_address.h"
 // #include <KnxTpUart.h>
 
 class KnxUsermod : public Usermod {
@@ -11,11 +12,6 @@ enum class Structure {
   THREE_LEVEL
 };
 
-enum class AddressType {
-  INDIVIDUAL,
-  GROUP
-};
-
   private:
 
     bool enabled = false;
@@ -23,7 +19,7 @@ enum class AddressType {
     unsigned long lastTime = 0;
 
     int8_t txPin, rxPin;
-    int16_t individualAddress = 0x3D10;
+    IndividualAddress individualAddress;
     // KnxTpUart* knxPtr;
 
     static const char _name[], _enabled[], _pin[], _txPin[], _rxPin[],
@@ -31,8 +27,6 @@ enum class AddressType {
 
     // Allocate pins for the bus connection
     void allocatePins();
-    char* addressToString(AddressType type, const uint16_t address);
-    uint16_t addressFromString(AddressType type, const char *address);
 
   public:
     inline void enable(bool enable) { enabled = enable; }
@@ -92,7 +86,7 @@ void KnxUsermod::readFromJsonState(JsonObject& root)
 
 void KnxUsermod::addToConfig(JsonObject& root)
 {
-  char* IA = addressToString(AddressType::INDIVIDUAL, individualAddress);
+  char* IA = individualAddress.toString();
 
   JsonObject top = root.createNestedObject(FPSTR(_name));
   top[FPSTR(_enabled)] = enabled;
@@ -114,7 +108,7 @@ bool KnxUsermod::readFromConfig(JsonObject& root)
   configComplete &= getJsonValue(top[FPSTR(_rxPin)], rxPin);
   configComplete &= getJsonValue(top[FPSTR(_individualAddress)], IA);
 
-  individualAddress = addressFromString(AddressType::INDIVIDUAL, IA);
+  individualAddress.fromString(IA);
 
   return configComplete;
 }
@@ -155,76 +149,6 @@ void KnxUsermod::allocatePins() {
     rxPin = -1;
     // @FIX Add user facing error
     return;
-  }
-}
-
-char *KnxUsermod::addressToString(AddressType type, const uint16_t address)
-{
-  // XX.XX.XXX + 1
-  char* addr = new char[30];
-
-  if (type == AddressType::INDIVIDUAL) {
-    sprintf(addr, "%d.%d.%d", (address >> 12) & 0x0F, (address >> 8) & 0x0F, address & 0xFF);
-  }
-
-  return addr;
-}
-
-uint16_t KnxUsermod::addressFromString(AddressType type, const char *address)
-{
-  uint16_t  addr = 0, delim = 0, acc = 0;
-  bool valid = true;
-
-  if (type == AddressType::INDIVIDUAL) {
-    while (*address && valid) {
-      char c = *address++;
-      if (c >= '0' && c <= '9')
-      {
-          acc = acc * 10 + (c - '0');
-          // Highest address 15.15.255
-          valid = (delim < 2) ? acc <= 15 : acc <= 255;
-      }
-      else if (c == '.')
-      {
-        switch (delim) {
-          case 0:
-            addr |= (acc << 12);
-            break;
-          case 1:
-            addr |= (acc << 8);
-            break;
-          default:
-            // Too many dots
-            valid = false;
-            break;
-        }
-        acc = 0;
-        delim++;
-      }
-      else
-      {
-        // Invalid character
-        valid = false;
-        break;
-      }
-    }
-
-    if (delim != 2) {
-        // Not enough dots
-        valid = false;
-    }
-
-    addr |= acc;
-
-    if (valid) {
-
-      return addr;
-    }
-    else {
-      // @FIX Add user facing error
-      // @FIX add invalid device address check (x.x.0 is invalid or similar)
-      return 0;
-    }
   }
 }
 
