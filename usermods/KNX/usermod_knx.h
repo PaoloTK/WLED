@@ -161,7 +161,7 @@ void KnxUsermod::allocatePins() {
 char *KnxUsermod::addressToString(AddressType type, const uint16_t address)
 {
   // XX.XX.XXX + 1
-  char* addr = new char[10];
+  char* addr = new char[30];
 
   if (type == AddressType::INDIVIDUAL) {
     sprintf(addr, "%d.%d.%d", (address >> 12) & 0x0F, (address >> 8) & 0x0F, address & 0xFF);
@@ -172,13 +172,11 @@ char *KnxUsermod::addressToString(AddressType type, const uint16_t address)
 
 uint16_t KnxUsermod::addressFromString(AddressType type, const char *address)
 {
-  uint16_t  addr,
-            first, second, third,
-            delim = 0, acc = 0;
+  uint16_t  addr = 0, delim = 0, acc = 0;
   bool valid = true;
 
   if (type == AddressType::INDIVIDUAL) {
-    while (*address & valid) {
+    while (*address && valid) {
       char c = *address++;
       if (c >= '0' && c <= '9')
       {
@@ -190,10 +188,10 @@ uint16_t KnxUsermod::addressFromString(AddressType type, const char *address)
       {
         switch (delim) {
           case 0:
-            addr |= acc << 12;
+            addr |= (acc << 12);
             break;
           case 1:
-            addr |= acc << 8;
+            addr |= (acc << 8);
             break;
           default:
             // Too many dots
@@ -217,12 +215,6 @@ uint16_t KnxUsermod::addressFromString(AddressType type, const char *address)
     }
 
     addr |= acc;
-
-      DEBUG_PRINTLN("ADDRESS");
-      DEBUG_PRINTLN("ADDRESS");
-      DEBUG_PRINTLN("ADDRESS");
-      DEBUG_PRINTLN("ADDRESS");
-      DEBUG_PRINTLN(addr);
 
     if (valid) {
 
