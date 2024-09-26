@@ -9,6 +9,7 @@ enum class GroupStyle {
 
 class GroupAddress {
     private:
+        GroupStyle _style = GroupStyle::THREE_LEVEL;
         uint16_t _address = 0;
     public:
         GroupAddress() {}
