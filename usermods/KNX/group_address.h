@@ -1,17 +1,23 @@
 #pragma once
 #include "wled.h"
 
-class IndividualAddress {
+enum class GroupStyle {
+  FREE = 0,
+  TWO_LEVEL = 1,
+  THREE_LEVEL = 2
+};
+
+class GroupAddress {
     private:
         uint16_t _address = 0;
     public:
-        IndividualAddress() {}
-        IndividualAddress(uint16_t address) { _address = address; }
+        GroupAddress() {}
+        GroupAddress(uint16_t address) { _address = address; }
         bool fromString(const char* address);
         char* toString();
 };
 
-bool IndividualAddress::fromString(const char* address) {
+bool GroupAddress::fromString(const char* address) {
   uint16_t  addr = 0, delim = 0, acc = 0;
   bool valid = true;
 
@@ -61,7 +67,7 @@ bool IndividualAddress::fromString(const char* address) {
   }
 }
 
-char *IndividualAddress::toString() {
+char *GroupAddress::toString() {
   // XX.XX.XXX + 1
   char* addr = new char[10];
 

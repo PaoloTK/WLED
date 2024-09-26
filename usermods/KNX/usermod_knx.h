@@ -1,17 +1,12 @@
 #pragma once
 
 #include "wled.h"
+#include "group_address.h"
 #include "individual_address.h"
+
 // #include <KnxTpUart.h>
 
 class KnxUsermod : public Usermod {
-
-enum class Structure {
-  FREE,
-  TWO_LEVEL,
-  THREE_LEVEL
-};
-
   private:
 
     bool enabled = false;
@@ -20,10 +15,12 @@ enum class Structure {
 
     int8_t txPin, rxPin;
     IndividualAddress individualAddress;
+    GroupStyle groupStyle;
     // KnxTpUart* knxPtr;
 
     static const char _name[], _enabled[], _pin[], _txPin[], _rxPin[],
-                      _individualAddress[], _connectTo[], _onBusCoupler[];
+                      _individualAddress[], _groupStyle[],
+                      _connectTo[], _onBusCoupler[];
 
     // Allocate pins for the bus connection
     void allocatePins();
@@ -93,6 +90,8 @@ void KnxUsermod::addToConfig(JsonObject& root)
   top[FPSTR(_txPin)] = txPin;
   top[FPSTR(_rxPin)] = rxPin;
   top[FPSTR(_individualAddress)] = IA;
+  top[FPSTR(_groupStyle)] = groupStyle;
+
   delete[] IA;
 
 }
@@ -103,10 +102,11 @@ bool KnxUsermod::readFromConfig(JsonObject& root)
   JsonObject top = root[FPSTR(_name)];
 
   bool configComplete = !top.isNull();
-  configComplete &= getJsonValue(top[FPSTR(_enabled)], enabled);
-  configComplete &= getJsonValue(top[FPSTR(_txPin)], txPin);
-  configComplete &= getJsonValue(top[FPSTR(_rxPin)], rxPin);
+  configComplete &= getJsonValue(top[FPSTR(_enabled)], enabled, false);
+  configComplete &= getJsonValue(top[FPSTR(_txPin)], txPin, -1);
+  configComplete &= getJsonValue(top[FPSTR(_rxPin)], rxPin, -1);
   configComplete &= getJsonValue(top[FPSTR(_individualAddress)], IA);
+  configComplete &= getJsonValue(top[FPSTR(_groupStyle)], groupStyle, GroupStyle::THREE_LEVEL);
 
   individualAddress.fromString(IA);
 
@@ -115,27 +115,13 @@ bool KnxUsermod::readFromConfig(JsonObject& root)
 
 void KnxUsermod::appendConfigData()
 {
-  // @FIX Verify if String.c_str() is more efficient than just hardcoding the strings
-  // addInfo('KNX:TX pin',1,'Connect to RX Pin on bus coupler')"
-  oappend(SET_F("addInfo('"));
-  oappend(String(FPSTR(_name)).c_str());
-  oappend(SET_F(":"));
-  oappend(String(FPSTR(_txPin)).c_str());
-  oappend(SET_F("',1,'"));
-  oappend(String(FPSTR(_connectTo)).c_str());
-  oappend(String(FPSTR(_rxPin)).c_str());
-  oappend(String(FPSTR(_onBusCoupler)).c_str());
-  oappend(SET_F("');"));
-  // addInfo('KNX:RX pin',1,'Connect to TX Pin on bus coupler')"
-  oappend(SET_F("addInfo('"));
-  oappend(String(FPSTR(_name)).c_str());
-  oappend(SET_F(":"));
-  oappend(String(FPSTR(_rxPin)).c_str());
-  oappend(SET_F("',1,'"));
-  oappend(String(FPSTR(_connectTo)).c_str());
-  oappend(String(FPSTR(_txPin)).c_str());
-  oappend(String(FPSTR(_onBusCoupler)).c_str());
-  oappend(SET_F("');"));
+  oappend(SET_F("addInfo('KNX:TX pin',1,'Connect to RX Pin on bus coupler')"));
+  oappend(SET_F("addInfo('KNX:RX pin',1,'Connect to TX Pin on bus coupler')"));
+
+  oappend(SET_F("dd=addDropdown('KNX','Group style');"));
+  oappend(SET_F("addOption(dd,'Free-Level',0);"));
+  oappend(SET_F("addOption(dd,'2-Level',1);"));
+  oappend(SET_F("addOption(dd,'3-Level',2);"));
 }
 
 void KnxUsermod::onStateChange(uint8_t mode) {
@@ -157,6 +143,5 @@ const char KnxUsermod::_name[] PROGMEM              = "KNX";
 const char KnxUsermod::_enabled[] PROGMEM           = "enabled";
 const char KnxUsermod::_txPin[] PROGMEM             = "TX pin";
 const char KnxUsermod::_rxPin[] PROGMEM             = "RX pin";
-const char KnxUsermod::_connectTo[] PROGMEM         = "Connect to ";
-const char KnxUsermod::_onBusCoupler[] PROGMEM      = " on bus coupler";
 const char KnxUsermod::_individualAddress[] PROGMEM = "individual address";
+const char KnxUsermod::_groupStyle[] PROGMEM        = "group style";
