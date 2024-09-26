@@ -1,7 +1,7 @@
 #pragma once
 #include "wled.h"
 
-enum class GroupStyle {
+enum GroupStyle {
   FREE = 0,
   TWO_LEVEL = 1,
   THREE_LEVEL = 2
@@ -14,6 +14,8 @@ class GroupAddress {
     public:
         GroupAddress() {}
         GroupAddress(uint16_t address) { _address = address; }
+        GroupAddress(uint16_t address, GroupStyle style) { _address = address; _style = style;}
+        void setStyle(GroupStyle style) { _style = style; }
         bool fromString(const char* address);
         char* toString();
 };
@@ -69,10 +71,22 @@ bool GroupAddress::fromString(const char* address) {
 }
 
 char *GroupAddress::toString() {
-  // XX.XX.XXX + 1
+  // XX/XX/XXX + 1
   char* addr = new char[10];
 
-  sprintf(addr, "%d.%d.%d", (_address >> 12) & 0x0F, (_address >> 8) & 0x0F, _address & 0xFF);
+  switch(_style) {
+    case GroupStyle::FREE:
+      sprintf(addr, "%d", _address);
+      break;
+    case GroupStyle::TWO_LEVEL:
+      sprintf(addr, "%d.%d", (_address >> 12) & 0x0F, _address & 0xFFF);  
+      break;
+    case GroupStyle::THREE_LEVEL:
+      sprintf(addr, "%d.%d.%d", (_address >> 12) & 0x0F, (_address >> 8) & 0x0F, _address & 0xFF);
+      break;
+    default:
+      sprintf(addr, "%d", 0);
+  }
 
   return addr;
 }
