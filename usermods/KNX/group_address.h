@@ -18,44 +18,96 @@ class GroupAddress {
         void setStyle(GroupStyle style) { _style = style; }
         bool fromString(const char* address);
         char* toString();
+
+        operator bool () const { return _address != 0; }
 };
 
 bool GroupAddress::fromString(const char* address) {
-  uint16_t  addr = 0, delim = 0, acc = 0;
+  uint16_t addr = 0, delim = 0;
+  uint32_t acc = 0;
   bool valid = true;
 
   while (*address && valid) {
-      char c = *address++;
-      if (c >= '0' && c <= '9') {
-          acc = acc * 10 + (c - '0');
-          // Highest address 15.15.255, last part can't be 0
-          valid = (delim < 2) ? acc <= 15 : 0 < acc && acc <= 255;
-      }
-      else if (c == '.') {
-          switch (delim) {
+    char c = *address++;
+    if (c >= '0' && c <= '9') {
+        acc = acc * 10 + (c - '0');
+        switch(_style) {
+          case GroupStyle::FREE:
+            valid = delim == 0 && acc <= 0xFFFF;
+            break;
+          case GroupStyle::TWO_LEVEL:
+            switch(delim) {
               case 0:
-              addr |= (acc << 12);
-              break;
+                valid = acc <= 0xF;
+                break;
               case 1:
-              addr |= (acc << 8);
-              break;
+                valid = acc <= 0xFFF;
+                break;
               default:
-              // Too many dots
-              valid = false;
-              break;
-          }
-          acc = 0;
-          delim++;
-      } else {
-          // Invalid character
-          valid = false;
-          break;
-      }
+                valid = false;
+            }
+            break;
+          case GroupStyle::THREE_LEVEL:
+            switch(delim) {
+              case 0:
+                valid = acc <= 0xF;
+              case 1:
+                valid = acc <= 0xF;
+              case 2:
+                valid = acc <= 0xFFF;
+              default:
+                valid = false;
+            }
+            break;
+          default:
+            valid = false;
+        }
+    }
+    else if (c == '/') {
+        switch (_style) {
+          case GroupStyle::FREE:
+            valid = false;
+            break;
+          case GroupStyle::TWO_LEVEL:
+            switch(delim) {
+              case 0:
+                addr |= (acc << 12);
+                break;
+              default:
+                valid = false;
+            }
+            break;
+          case GroupStyle::THREE_LEVEL:
+            switch(delim) {
+              case 0:
+                addr |= (acc << 12);
+              case 1:
+                addr |= (acc << 8);
+              default:
+                valid = false;
+            }
+            break;
+          default:
+            valid = false;
+        }
+        acc = 0;
+        delim++;
+    } else {
+        // Invalid character
+        valid = false;
+        break;
+    }
   }
 
-  if (delim != 2) {
-      // Not enough dots
-      valid = false;
+  switch (_style) {
+    case GroupStyle::FREE:
+      break;
+    case GroupStyle::TWO_LEVEL:
+      valid = delim == 1;
+      break;
+    case GroupStyle::THREE_LEVEL:
+      valid = delim == 2;
+      break;
   }
 
   addr |= acc;
