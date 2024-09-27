@@ -5,6 +5,17 @@
 #include "individual_address.h"
 #include <KnxTpUart.h>
 
+enum class ObjectFunction {
+  SWITCH,
+  ABSOLUTE_DIM,
+  RELATIVE_DIM
+};
+
+enum class ObjectType {
+  LISTEN,
+  STATE
+};
+
 class KnxUsermod : public Usermod {
   private:
 
@@ -33,8 +44,6 @@ class KnxUsermod : public Usermod {
     void setup() override;
     void loop() override;
     void addToJsonInfo(JsonObject &root) override;
-    void addToJsonState(JsonObject &root) override;
-    void readFromJsonState(JsonObject &root) override;
     void addToConfig(JsonObject &root) override;
     bool readFromConfig(JsonObject &root) override;
     void appendConfigData() override;
@@ -68,24 +77,6 @@ void KnxUsermod::addToJsonInfo(JsonObject& root)
   if (enabled) {
     JsonArray addressArr = user.createNestedArray(FPSTR(_individualAddress));
     addressArr.add(individualAddress.toString());
-  }
-}
-
-void KnxUsermod::addToJsonState(JsonObject& root)
-{
-  if (!initDone || !enabled) return;  // prevent crash on boot applyPreset()
-
-  JsonObject usermod = root[FPSTR(_name)];
-  if (usermod.isNull()) usermod = root.createNestedObject(FPSTR(_name));
-}
-
-void KnxUsermod::readFromJsonState(JsonObject& root)
-{
-  if (!initDone) return;  // prevent crash on boot applyPreset()
-
-  JsonObject usermod = root[FPSTR(_name)];
-  if (!usermod.isNull()) {
-    // userVar0 = usermod["user0"] | userVar0;
   }
 }
 
