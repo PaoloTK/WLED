@@ -3,8 +3,7 @@
 #include "wled.h"
 #include "group_address.h"
 #include "individual_address.h"
-
-// #include <KnxTpUart.h>
+#include <KnxTpUart.h>
 
 class KnxUsermod : public Usermod {
   private:
@@ -16,14 +15,15 @@ class KnxUsermod : public Usermod {
     int8_t txPin, rxPin;
     IndividualAddress individualAddress;
     GroupStyle groupStyle;
-    // KnxTpUart* knxPtr;
+    KnxTpUart* knx;
 
     static const char _name[], _enabled[], _disabled[],
                       _pin[], _txPin[], _rxPin[],
                       _individualAddress[], _groupStyle[];
 
     // Allocate pins for the bus connection
-    void allocatePins();
+    bool allocatePins();
+    void initBus();
 
   public:
     inline void enable(bool enable) { enabled = enable; }
@@ -42,7 +42,7 @@ class KnxUsermod : public Usermod {
 };
 
 void KnxUsermod::setup() {
-  allocatePins();
+  initBus();
 
   initDone = true;
 }
@@ -126,23 +126,33 @@ void KnxUsermod::appendConfigData()
   oappend(SET_F("addInfo('KNX:TX pin',1,'Connect to RX Pin on bus coupler');"));
   oappend(SET_F("addInfo('KNX:RX pin',1,'Connect to TX Pin on bus coupler');"));
 
-  oappend(SET_F("dd=addDropdown('KNX','group style');"));
-  oappend(SET_F("addOption(dd,'Free-Level',0);"));
-  oappend(SET_F("addOption(dd,'2-Level',1);"));
-  oappend(SET_F("addOption(dd,'3-Level',2);"));
+  oappend(SET_F("gs=addDropdown('KNX','group style');"));
+  oappend(SET_F("addOption(gs,'Free-Level',0);"));
+  oappend(SET_F("addOption(gs,'2-Level',1);"));
+  oappend(SET_F("addOption(gs,'3-Level',2);"));
 }
 
 void KnxUsermod::onStateChange(uint8_t mode) {
   // do something if WLED state changed (color, brightness, effect, preset, etc)
 }
 
-void KnxUsermod::allocatePins() {
+bool KnxUsermod::allocatePins() {
   PinManagerPinType pins[2] = { { txPin, true }, { rxPin, false } };
   if (!pinManager.allocateMultiplePins(pins, 2, PinOwner::UM_KNX)) {
     txPin = -1;
     rxPin = -1;
     // @FIX Add user facing error
-    return;
+    return false;
+  }
+  return true;
+}
+
+void KnxUsermod::initBus() {
+  if (individualAddress && allocatePins()) {
+    knx = new KnxTpUart(&Serial1, individualAddress.toString());
+    if (knx) {
+      
+    }
   }
 }
 
