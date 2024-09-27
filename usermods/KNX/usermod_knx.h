@@ -18,9 +18,9 @@ class KnxUsermod : public Usermod {
     GroupStyle groupStyle;
     // KnxTpUart* knxPtr;
 
-    static const char _name[], _enabled[], _pin[], _txPin[], _rxPin[],
-                      _individualAddress[], _groupStyle[],
-                      _connectTo[], _onBusCoupler[];
+    static const char _name[], _enabled[], _disabled[],
+                      _pin[], _txPin[], _rxPin[],
+                      _individualAddress[], _groupStyle[];
 
     // Allocate pins for the bus connection
     void allocatePins();
@@ -61,6 +61,14 @@ void KnxUsermod::addToJsonInfo(JsonObject& root)
 {
   JsonObject user = root["u"];
   if (user.isNull()) user = root.createNestedObject("u");
+
+  JsonArray knxArr = user.createNestedArray(FPSTR(_name));
+  knxArr.add(enabled ? FPSTR(_enabled) : FPSTR(_disabled));
+
+  if (enabled) {
+    JsonArray addressArr = user.createNestedArray(FPSTR(_individualAddress));
+    addressArr.add(individualAddress.toString());
+  }
 }
 
 void KnxUsermod::addToJsonState(JsonObject& root)
@@ -115,10 +123,10 @@ bool KnxUsermod::readFromConfig(JsonObject& root)
 
 void KnxUsermod::appendConfigData()
 {
-  oappend(SET_F("addInfo('KNX:TX pin',1,'Connect to RX Pin on bus coupler')"));
-  oappend(SET_F("addInfo('KNX:RX pin',1,'Connect to TX Pin on bus coupler')"));
+  oappend(SET_F("addInfo('KNX:TX pin',1,'Connect to RX Pin on bus coupler');"));
+  oappend(SET_F("addInfo('KNX:RX pin',1,'Connect to TX Pin on bus coupler');"));
 
-  oappend(SET_F("dd=addDropdown('KNX','Group style');"));
+  oappend(SET_F("dd=addDropdown('KNX','group style');"));
   oappend(SET_F("addOption(dd,'Free-Level',0);"));
   oappend(SET_F("addOption(dd,'2-Level',1);"));
   oappend(SET_F("addOption(dd,'3-Level',2);"));
@@ -141,6 +149,7 @@ void KnxUsermod::allocatePins() {
 // add more strings here to reduce flash memory usage
 const char KnxUsermod::_name[] PROGMEM              = "KNX";
 const char KnxUsermod::_enabled[] PROGMEM           = "enabled";
+const char KnxUsermod::_disabled[] PROGMEM          = "disabled";
 const char KnxUsermod::_txPin[] PROGMEM             = "TX pin";
 const char KnxUsermod::_rxPin[] PROGMEM             = "RX pin";
 const char KnxUsermod::_individualAddress[] PROGMEM = "individual address";
