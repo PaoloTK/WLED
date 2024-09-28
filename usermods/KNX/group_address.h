@@ -13,8 +13,8 @@ class GroupAddress {
         uint16_t _address = 0;
     public:
         GroupAddress() {}
-        GroupAddress(uint16_t address) { _address = address; }
-        GroupAddress(uint16_t address, GroupStyle style) { _address = address; _style = style;}
+        GroupAddress(uint16_t address) : _address(address) {}
+        GroupAddress(uint16_t address, GroupStyle style) : _address(address), _style(style) {}
         void setStyle(GroupStyle style) { _style = style; }
         bool fromString(const char* address);
         char* toString();

@@ -6,7 +6,7 @@ class IndividualAddress {
         uint16_t _address = 0;
     public:
         IndividualAddress() {}
-        IndividualAddress(uint16_t address) { _address = address; }
+        IndividualAddress(uint16_t address) : _address(address) {}
         bool fromString(const char* address);
         char* toString();
 
