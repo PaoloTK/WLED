@@ -1,20 +1,9 @@
 #pragma once
 
 #include "wled.h"
-#include "group_address.h"
 #include "individual_address.h"
+#include "group_object.h"
 #include <KnxTpUart.h>
-
-enum class ObjectFunction {
-  SWITCH,
-  ABSOLUTE_DIM,
-  RELATIVE_DIM
-};
-
-enum class ObjectType {
-  LISTEN,
-  STATE
-};
 
 class KnxUsermod : public Usermod {
   private:
@@ -27,6 +16,20 @@ class KnxUsermod : public Usermod {
     IndividualAddress individualAddress;
     GroupStyle groupStyle;
     KnxTpUart* knx;
+    GroupObject mainListenObjects[5] = {
+      GroupObject(ObjectFunction::SWITCH, ObjectType::LISTEN),
+      GroupObject(ObjectFunction::ABSOLUTE_DIM, ObjectType::LISTEN),
+      GroupObject(ObjectFunction::RELATIVE_DIM, ObjectType::LISTEN),
+      GroupObject(ObjectFunction::PALETTE, ObjectType::LISTEN),
+      GroupObject(ObjectFunction::PLAYLIST, ObjectType::LISTEN)
+    };
+
+    GroupObject mainStateObjects[4] = {
+      GroupObject(ObjectFunction::SWITCH, ObjectType::STATE),
+      GroupObject(ObjectFunction::ABSOLUTE_DIM, ObjectType::STATE),
+      GroupObject(ObjectFunction::PALETTE, ObjectType::STATE),
+      GroupObject(ObjectFunction::PLAYLIST, ObjectType::STATE)
+    };
 
     static const char _name[], _enabled[], _disabled[],
                       _pin[], _txPin[], _rxPin[],
