@@ -72,18 +72,18 @@ void KnxUsermod::addToJsonInfo(JsonObject& root)
 
 void KnxUsermod::addToConfig(JsonObject& root)
 {
-  char* IA = individualAddress.toString();
-
   JsonObject top = root.createNestedObject(FPSTR(_name));
+
   top[FPSTR(_enabled)] = enabled;
   top[FPSTR(_txPin)] = txPin;
   top[FPSTR(_rxPin)] = rxPin;
-  top[FPSTR(_individualAddress)] = IA;
-  top[FPSTR(_groupStyle)] = static_cast<int>(groupStyle);
-  JsonObject switchArr = top.createNestedObject(switchListen.printInfo());
-  switchArr["asd"] = switchListen.getAddress().toString();
 
+  char* IA = individualAddress.toString();
+  top[FPSTR(_individualAddress)] = IA;
   delete[] IA;
+  
+  top[FPSTR(_groupStyle)] = static_cast<int>(groupStyle);
+
 
 }
 
