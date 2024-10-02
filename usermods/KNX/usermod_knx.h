@@ -16,20 +16,7 @@ class KnxUsermod : public Usermod {
     IndividualAddress individualAddress;
     GroupStyle groupStyle;
     KnxTpUart* knx;
-    GroupObject mainListenObjects[5] = {
-      GroupObject(ObjectFunction::SWITCH, ObjectType::LISTEN),
-      GroupObject(ObjectFunction::ABSOLUTE_DIM, ObjectType::LISTEN),
-      GroupObject(ObjectFunction::RELATIVE_DIM, ObjectType::LISTEN),
-      GroupObject(ObjectFunction::PALETTE, ObjectType::LISTEN),
-      GroupObject(ObjectFunction::PLAYLIST, ObjectType::LISTEN)
-    };
-
-    GroupObject mainStateObjects[4] = {
-      GroupObject(ObjectFunction::SWITCH, ObjectType::STATE),
-      GroupObject(ObjectFunction::ABSOLUTE_DIM, ObjectType::STATE),
-      GroupObject(ObjectFunction::PALETTE, ObjectType::STATE),
-      GroupObject(ObjectFunction::PLAYLIST, ObjectType::STATE)
-    };
+    GroupObject switchListen = {ObjectFunction::SWITCH, ObjectType::LISTEN};
 
     static const char _name[], _enabled[], _disabled[],
                       _pin[], _txPin[], _rxPin[],
@@ -92,7 +79,9 @@ void KnxUsermod::addToConfig(JsonObject& root)
   top[FPSTR(_txPin)] = txPin;
   top[FPSTR(_rxPin)] = rxPin;
   top[FPSTR(_individualAddress)] = IA;
-  top[FPSTR(_groupStyle)] = groupStyle;
+  top[FPSTR(_groupStyle)] = static_cast<int>(groupStyle);
+  JsonObject switchArr = top.createNestedObject(switchListen.printInfo());
+  switchArr["asd"] = switchListen.getAddress().toString();
 
   delete[] IA;
 
@@ -100,18 +89,22 @@ void KnxUsermod::addToConfig(JsonObject& root)
 
 bool KnxUsermod::readFromConfig(JsonObject& root)
 {
-  const char* IA;
   JsonObject top = root[FPSTR(_name)];
-
+  
   bool configComplete = !top.isNull();
   configComplete &= getJsonValue(top[FPSTR(_enabled)], enabled, false);
   configComplete &= getJsonValue(top[FPSTR(_txPin)], txPin, -1);
   configComplete &= getJsonValue(top[FPSTR(_rxPin)], rxPin, -1);
+
+  const char* IA = nullptr;
   configComplete &= getJsonValue(top[FPSTR(_individualAddress)], IA);
-  configComplete &= getJsonValue(top[FPSTR(_groupStyle)], groupStyle, GroupStyle::THREE_LEVEL);
-
-  individualAddress.fromString(IA);
-
+  if (IA) individualAddress.fromString(IA);
+  
+  unsigned style = 0;
+  configComplete &= getJsonValue(top[FPSTR(_groupStyle)], style, static_cast<int>(GroupStyle::THREE_LEVEL));
+  // @FIX remove magic numbers
+  if (style >= 0 && style <= 2) groupStyle = static_cast<GroupStyle>(style);
+  
   return configComplete;
 }
 

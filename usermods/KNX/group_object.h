@@ -20,7 +20,7 @@ class GroupObject {
     ObjectType _type;
     GroupAddress _address;
 
-    static const char _listen[], _state[], 
+    static const char _unknown[], _listen[], _state[], 
                       _switch[], _absolute_dim[], _relative_dim[],
                       _palette[], _playlist[];
   public:
@@ -34,31 +34,57 @@ class GroupObject {
     ObjectFunction getFunction() { return _function; }
     ObjectType getType() { return _type; }
     GroupAddress getAddress() { return _address; }
-    GroupAddress setAddress(const char* address) { _address.fromString(address); }
+    bool setAddress(const char* address) { return _address.fromString(address); }
     char* printInfo();
 
 };
 
 char* GroupObject::printInfo() {
-    // "listen" + 1
-    char* typeInfo = new char[7];
-    // "absolute dim" + 1
-    char* functionInfo = new char[13];
-    switch (_type) {
-      case ObjectType::LISTEN:
-        strcpy_P(typeInfo, (PGM_P)FPSTR(_listen));
-        break;
-      case ObjectType::STATE:
-        strcpy_P(typeInfo, (PGM_P)FPSTR(_state));
-        break;
-      default:
-        strcpy_P(typeInfo, "unknown");
+    const char* typeStr = nullptr;
+    const char* functionStr = nullptr;
 
+    switch (_function) {
+        case ObjectFunction::SWITCH:
+            functionStr = _switch;
+            break;
+        case ObjectFunction::ABSOLUTE_DIM:
+            functionStr = _absolute_dim;
+            break;
+        case ObjectFunction::RELATIVE_DIM:
+            functionStr = _relative_dim;
+            break;
+        case ObjectFunction::PALETTE:
+            functionStr = _palette;
+            break;
+        case ObjectFunction::PLAYLIST:
+            functionStr = _playlist;
+            break;
+        default:
+            functionStr = _unknown;
+            break;
     }
-      
+
+    switch (_type) {
+        case ObjectType::LISTEN:
+            typeStr = _listen;
+            break;
+        case ObjectType::STATE:
+            typeStr = _state;
+            break;
+        default:
+            typeStr = _unknown;
+            break;
+    }
+
+    // "absolute dim" + "listen" + space + terminator
+    static char info[20];
+    snprintf(info, sizeof(info), "%s %s", functionStr, typeStr);
+    
+    return info;
 }
 
 // add more strings here to reduce flash memory usage
+const char GroupObject::_unknown[] PROGMEM       = "unknown";
 const char GroupObject::_listen[] PROGMEM        = "listen";
 const char GroupObject::_state[] PROGMEM         = "state";
 const char GroupObject::_switch[] PROGMEM        = "switch";

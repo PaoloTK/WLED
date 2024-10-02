@@ -1,7 +1,7 @@
 #pragma once
 #include "wled.h"
 
-enum GroupStyle {
+enum class GroupStyle {
   FREE = 0,
   TWO_LEVEL = 1,
   THREE_LEVEL = 2
@@ -9,8 +9,8 @@ enum GroupStyle {
 
 class GroupAddress {
     private:
-        GroupStyle _style = GroupStyle::THREE_LEVEL;
         uint16_t _address = 0;
+        GroupStyle _style = GroupStyle::THREE_LEVEL;
     public:
         GroupAddress() {}
         GroupAddress(uint16_t address) : _address(address) {}
