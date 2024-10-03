@@ -9,6 +9,7 @@ enum class ObjectFunction {
   PLAYLIST
 };
 
+// https://support.knx.org/hc/en-us/articles/4401873529490-Devices-Icons
 enum class ObjectType {
   LISTEN,
   STATE
