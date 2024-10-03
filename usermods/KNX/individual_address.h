@@ -3,6 +3,7 @@
 
 class IndividualAddress {
     private:
+        // @FIX default is invalid, last digit can't be 0
         uint16_t _address = 0;
     public:
         IndividualAddress() {}
