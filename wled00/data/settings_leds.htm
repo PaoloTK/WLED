@@ -573,8 +573,11 @@ Swap: <select id="xw${s}" name="XW${s}">
 		function checkSi() { //on load, checks whether there are custom start fields
 			var cs = false;
 			for (var i=1; i < gEBCN("iST").length; i++) {
-				var v = parseInt(gId("ls"+(i-1)).value) + parseInt(gN("LC"+(i-1)).value);
-				if (v != parseInt(gId("ls"+i).value)) {cs = true; startsDirty[i] = true;}
+				var s = String.fromCharCode((i<10?48:55)+i);
+				var p = String.fromCharCode((i<10?48:55)+i-1);
+				if (i == 10) p = '9';
+				var v = parseInt(gId("ls"+p).value) + parseInt(gN("LC"+p).value);
+				if (v != parseInt(gId("ls"+s).value)) {cs = true; startsDirty[i] = true;}
 			}
 			if (gId("ls0") && parseInt(gId("ls0").value) != 0) {cs = true; startsDirty[0] = true;}
 			gId("si").checked = cs;
@@ -606,7 +609,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 				var c = JSON.parse(lines); 
 				if (c.hw) {
 					if (c.hw.led) {
-						for (var i=0; i<10; i++) addLEDs(-1);
+						for (var i=0; i<18; i++) addLEDs(-1);
 						var l = c.hw.led;
 						l.ins.forEach((v,i,a)=>{
 							addLEDs(1);
